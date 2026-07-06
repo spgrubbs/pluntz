@@ -4,6 +4,7 @@ export interface DebugCallbacks {
   setDayCycle(on: boolean): void;
   setMoveRocks(on: boolean): void;
   spawnDebris(): void;
+  grantEnergy(): void;
   reset(reseed: boolean): void;
 }
 
@@ -33,7 +34,7 @@ export class DebugPanel {
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML = `
-      <div class="panel-head">PLUNTZ dev — M3</div>
+      <div class="panel-head">PLUNTZ dev — M4</div>
       <div class="panel-body">
         <div class="stats"></div>
         <div class="btn-row speed"></div>
@@ -47,6 +48,9 @@ export class DebugPanel {
         <label class="chk"><input type="checkbox" class="move" /> move rocks (drag)</label>
         <div class="btn-row">
           <button class="debris">spawn debris</button>
+          <button class="energy">+60⚡</button>
+        </div>
+        <div class="btn-row">
           <button class="reset">replant</button>
           <button class="reseed">reseed</button>
         </div>
@@ -85,6 +89,9 @@ export class DebugPanel {
     );
     (panel.querySelector('.debris') as HTMLElement).addEventListener('click', () =>
       cb.spawnDebris(),
+    );
+    (panel.querySelector('.energy') as HTMLElement).addEventListener('click', () =>
+      cb.grantEnergy(),
     );
     (panel.querySelector('.reset') as HTMLElement).addEventListener('click', () =>
       cb.reset(false),

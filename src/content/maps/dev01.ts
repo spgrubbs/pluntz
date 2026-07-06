@@ -20,5 +20,6 @@ export const DEV01: MapDef = {
     { x: 160, y: -640, r: 45 },
     { x: -260, y: 560, r: 60 },
   ],
-  spawns: [{ asteroid: 0, anchorDeg: -90, faction: 'pinophyta' }],
+  colonies: [{ name: 'Verdance', faction: 'pinophyta', player: true }],
+  spawns: [{ asteroid: 0, anchorDeg: -90, colony: 0 }],
 };

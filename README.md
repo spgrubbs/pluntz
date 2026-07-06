@@ -5,8 +5,8 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M3 — life & death: HP, bark hardening, needle lifespans, starvation
-  cascade, drifting debris, husks, and the first player verb: Prune.
+- **Status:** M4 — reproduction: seed cones, aimed shots across the void, sprouting,
+  colony energy pools, the Ping verb, impact particles, and visible part health.
 
 ## Development
 
@@ -21,7 +21,23 @@ npm run build    # typecheck + production bundle in dist/
 
 **URL params:** `?seed=123` fixes the world seed (also shown in the debug panel).
 
-## Current test script (M3)
+## Current test script (M4)
+
+1. **Cones:** let the tree mature (8× helps) — cone buds appear on high tips with a
+   charge arc, then pulse gold when armed. Left alone ~12s, an armed cone fires itself
+   at a promising rock. The inspector's aim line narrates every stage.
+2. **The shot:** drag from a pulsing armed cone — a range ring and aim line appear —
+   release to fire across the void. Watch the seed land, puff dust, and sprout.
+   Colonies spread rock to rock; crowded landings fizzle.
+3. **Ping:** tap **◎ ping**, then tap near a rock — cones now strongly prefer firing
+   at it for 60s (the blue pulsing marker).
+4. **Health & impacts:** spawn debris at the tree — hits flash sparks, wounded wood
+   darkens, shows cracks, and sheds amber motes until it dies or outgrows the damage.
+   The inspector has a new "wounds" row.
+5. **Colony pool:** young sprouts get fed by thriving elders (watch a fresh seedling's
+   energy climb faster than its own needles could manage).
+
+## Earlier scripts (M3)
 
 1. **Prune:** tap **✂ prune** (bottom right), swipe across a mid-trunk segment — the
    whole top falls dead (gray husk), energy is partially refunded, and the spire

@@ -1,15 +1,17 @@
 import type { Vec2 } from './vec';
-import { add, scale, norm, rot, dot, fromAngle, segsIntersect, DEG } from './vec';
+import { add, sub, scale, norm, rot, dot, fromAngle, segsIntersect, DEG } from './vec';
 import { makeRng } from './rng';
 import type { Asteroid, Part, PartKind, Plant, World, FactionId } from './types';
 import { FACTIONS, type FactionDef } from '../content/factions';
 import { shadeAt, toSunVec, type CanopySeg } from './light';
+import { emit } from './events';
 
 export function createPlant(
   world: World,
   asteroid: Asteroid,
   anchorAngle: number,
   faction: FactionId,
+  colonyId: number,
 ): Plant {
   const f = FACTIONS[faction];
   const up = fromAngle(anchorAngle);
@@ -32,6 +34,8 @@ export function createPlant(
     dead: false,
     hardened: false,
     maxAge: 0,
+    charge: 0,
+    armedAt: -1,
     shade: 0,
     group: 0,
   };
@@ -39,7 +43,9 @@ export function createPlant(
     id: world.nextId++,
     alive: true,
     faction,
+    colonyId,
     asteroidId: asteroid.id,
+    astPos: { ...asteroid.pos },
     anchorAngle,
     up,
     parts: [heart],
@@ -69,6 +75,7 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   const asteroid = world.asteroids.find((a) => a.id === plant.asteroidId);
   if (!asteroid) return;
 
+  plant.astPos = { ...asteroid.pos };
   plant.age += dt;
 
   // --- Aging: bark hardening, natural needle drop ----------------------------
@@ -127,6 +134,31 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     if (!plant.alive) return;
   }
 
+  // --- Cones: charge, arm, and eventually self-fire ---------------------------
+  const colony = world.colonies.find((c) => c.id === plant.colonyId);
+  for (const p of plant.parts) {
+    if (p.dead || p.kind !== 'cone') continue;
+    const R = f.repro;
+    if (p.charge < R.coneEnergy) {
+      const take = Math.min(
+        R.chargeRate * dt,
+        Math.max(plant.energy - f.energy.reserve, 0),
+        R.coneEnergy - p.charge,
+      );
+      if (take > 0) {
+        p.charge += take;
+        plant.energy -= take;
+      }
+      if (p.charge >= R.coneEnergy && p.armedAt < 0) {
+        p.armedAt = world.time;
+        plant.version++;
+      }
+    } else if (p.armedAt >= 0) {
+      const delay = colony && !colony.isPlayer ? R.aiAutoFire : R.armedAutoFire;
+      if (world.time - p.armedAt > delay) fireCone(world, plant, p.id, null);
+    }
+  }
+
   // --- Growth: one action per cooldown window -------------------------------
   plant.growthCooldown -= dt;
   if (plant.growthCooldown <= 0) {
@@ -137,6 +169,10 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       plant.growthCooldown = f.growth.actionCooldown * 0.5; // re-check soon
     }
   }
+}
+
+export function aliveConeCount(plant: Plant): number {
+  return plant.parts.filter((p) => !p.dead && p.kind === 'cone').length;
 }
 
 /** Attempt exactly one growth action. Returns true if something grew. */
@@ -165,7 +201,109 @@ function tryGrow(plant: Plant, f: FactionDef, toSun: Vec2): boolean {
   // 4. Extend a side branch.
   if (spendable >= g.stemCost && extendBranch(plant, f)) return true;
 
+  // 5. Bud seed cones on the highest free tips.
+  if (aliveConeCount(plant) < f.repro.coneMax && spendable >= f.repro.coneCost) {
+    return growCone(plant, f);
+  }
+
   return false;
+}
+
+/** Bud a cone on one of the highest stem tips (trunk top or branch ends). */
+function growCone(plant: Plant, f: FactionDef): boolean {
+  const hasChildStem = new Set<number>();
+  for (const p of plant.parts) {
+    if (!p.dead && (p.kind === 'stem' || p.kind === 'cone')) hasChildStem.add(p.parent);
+  }
+  const cands = plant.parts
+    .filter((p) => !p.dead && p.kind === 'stem' && !hasChildStem.has(p.id))
+    .sort((a, b) => (b.base.x ** 2 + b.base.y ** 2) - (a.base.x ** 2 + a.base.y ** 2));
+  if (cands.length === 0) return false;
+  const stem = cands[plant.rng.int(Math.min(3, cands.length))];
+  const hp = rollHp(plant, f, 'cone');
+  pushPart(plant, {
+    kind: 'cone',
+    parent: stem.id,
+    base: stem.tip,
+    tip: add(stem.tip, scale(stem.dir, 5)),
+    dir: stem.dir,
+    len: 5,
+    depth: stem.depth,
+    onBranch: stem.onBranch,
+    side: stem.side,
+    leafCount: 0,
+    age: 0,
+    hp,
+    maxHp: hp,
+    dead: false,
+    hardened: false,
+    maxAge: 0,
+    charge: 0,
+    armedAt: -1,
+    shade: 0,
+    group: stem.group,
+  });
+  plant.energy -= f.repro.coneCost;
+  return true;
+}
+
+/**
+ * Fire an armed cone. dir null = auto-aim at the most promising asteroid in
+ * range (unclaimed, rich, near the colony's ping). Returns false if held
+ * (not armed, or nothing worth shooting at).
+ */
+export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 | null): boolean {
+  const cone = plant.parts[coneId];
+  const f = FACTIONS[plant.faction];
+  const R = f.repro;
+  if (!plant.alive || cone.dead || cone.kind !== 'cone' || cone.charge < R.coneEnergy) {
+    return false;
+  }
+  const from = add(plant.astPos, cone.tip);
+  const aim = dir ?? autoAim(world, plant, from, R.seedRange);
+  if (!aim) return false; // hold fire until something is in range (or the player aims)
+
+  world.seeds.push({
+    id: world.nextId++,
+    colonyId: plant.colonyId,
+    faction: plant.faction,
+    pos: { ...from },
+    vel: scale(norm(aim), R.seedSpeed),
+    age: 0,
+    maxAge: R.seedRange / R.seedSpeed,
+  });
+  emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });
+  killPart(plant, coneId); // spent cone drops; the slot reopens
+  return true;
+}
+
+function autoAim(world: World, plant: Plant, from: Vec2, range: number): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestScore = 0;
+  for (const ast of world.asteroids) {
+    if (ast.id === plant.asteroidId) continue; // spread out, don't crowd home
+    const d = Math.hypot(ast.pos.x - from.x, ast.pos.y - from.y) - ast.radius;
+    if (d > range * 0.95) continue;
+    const residents = world.plants.filter(
+      (p) => p.alive && p.asteroidId === ast.id,
+    ).length;
+    let score = ((1 / (1 + residents)) * (ast.rich ? 1.3 : 1) * (1.2 - d / range));
+    const ping = world.ping;
+    if (
+      ping &&
+      ping.colonyId === plant.colonyId &&
+      Math.hypot(ping.x - ast.pos.x, ping.y - ast.pos.y) < ast.radius + 130
+    ) {
+      score *= 5;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      // aim inside the disc with a little scatter
+      const jitter = scale(fromAngle(plant.rng.range(0, Math.PI * 2)), ast.radius * 0.4);
+      best = sub(add(ast.pos, jitter), from);
+    }
+  }
+  return best;
 }
 
 export function maxLeavesFor(part: Part, f: FactionDef): number {
@@ -201,6 +339,13 @@ export function killPart(plant: Plant, id: number): void {
     if (part.dead) continue;
     part.dead = true;
     part.hp = 0;
+    emit({
+      type: 'partDied',
+      x: plant.astPos.x + (part.base.x + part.tip.x) / 2,
+      y: plant.astPos.y + (part.base.y + part.tip.y) / 2,
+      kind: part.kind,
+      faction: plant.faction,
+    });
     if (part.kind === 'leaf') {
       const parent = plant.parts[part.parent];
       if (parent && parent.leafCount > 0) parent.leafCount--;
@@ -241,7 +386,15 @@ export function damagePart(plant: Plant, id: number, dmg: number): void {
   const p = plant.parts[id];
   if (p.dead) return;
   p.hp -= dmg;
+  emit({
+    type: 'impact',
+    x: plant.astPos.x + (p.base.x + p.tip.x) / 2,
+    y: plant.astPos.y + (p.base.y + p.tip.y) / 2,
+    kind: p.kind,
+    power: dmg,
+  });
   if (p.hp <= 0) killPart(plant, id);
+  else plant.version++; // damage tint / cracks need a re-render
 }
 
 /** Starvation cascade: leaves wither first, then wood, the heart last. */
@@ -249,7 +402,7 @@ function applyStarvation(plant: Plant, f: FactionDef, dt: number): void {
   const hasAlive = (k: PartKind): boolean =>
     plant.parts.some((p) => !p.dead && p.kind === k);
   let kinds: PartKind[];
-  if (hasAlive('leaf')) kinds = ['leaf'];
+  if (hasAlive('leaf') || hasAlive('cone')) kinds = ['leaf', 'cone'];
   else if (hasAlive('stem') || hasAlive('root')) kinds = ['stem', 'root'];
   else kinds = ['heart'];
   for (const p of plant.parts) {
@@ -297,6 +450,7 @@ export function pruneAlongPath(world: World, plant: Plant, path: Vec2[]): PruneR
     stem: f.growth.stemCost,
     leaf: f.growth.leafCost,
     root: f.growth.rootCost,
+    cone: f.repro.coneCost,
     heart: 0,
   };
   let cut = 0;
@@ -340,6 +494,8 @@ function addRoot(plant: Plant, f: FactionDef): void {
     dead: false,
     hardened: false,
     maxAge: 0,
+    charge: 0,
+    armedAt: -1,
     shade: 0,
     group: 0,
   });
@@ -379,6 +535,8 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2): void {
     dead: false,
     hardened: false,
     maxAge: 0,
+    charge: 0,
+    armedAt: -1,
     shade: 0,
     group: 0,
   });
@@ -430,6 +588,8 @@ function extendBranch(plant: Plant, f: FactionDef): boolean {
     dead: false,
     hardened: false,
     maxAge: 0,
+    charge: 0,
+    armedAt: -1,
     shade: 0,
     group: 0,
   });
@@ -470,6 +630,8 @@ function addLeaf(plant: Plant, f: FactionDef): boolean {
       dead: false,
       hardened: false,
       maxAge: plant.rng.range(f.life.leafLifespan[0], f.life.leafLifespan[1]),
+      charge: 0,
+      armedAt: -1,
       shade: 0,
       group: stem.group, // needles share their branch's occlusion group
     });

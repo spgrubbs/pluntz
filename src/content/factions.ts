@@ -1,22 +1,28 @@
 import type { FactionId } from '../sim/types';
 
 /** The growth-policy stages a plant can be in — mirrors tryGrow's priorities. */
-export type IntentId = 'anchor' | 'needles' | 'trunk' | 'branches' | 'mature';
+export type IntentId = 'anchor' | 'needles' | 'trunk' | 'branches' | 'cones' | 'mature';
+
+export interface FactionColors {
+  stem: number;
+  stemOld: number;
+  leaf: number;
+  leafCanopy: number; // under foliage shade (half income)
+  leafShaded: number; // in hard rock shadow
+  leafStarving: number;
+  root: number;
+  heart: number;
+  heartCore: number;
+  cone: number;
+  coneArmed: number;
+  seed: number;
+}
 
 export interface FactionDef {
   id: FactionId;
   name: string;
-  colors: {
-    stem: number;
-    stemOld: number;
-    leaf: number;
-    leafCanopy: number; // under foliage shade (half income)
-    leafShaded: number; // in hard rock shadow
-    leafStarving: number;
-    root: number;
-    heart: number;
-    heartCore: number;
-  };
+  /** palettes[0] is the default; extra palettes distinguish same-faction colonies. */
+  palettes: FactionColors[];
   /** Static text shown in the inspector's expandable behavior section. */
   behavior: {
     summary: string;
@@ -34,18 +40,30 @@ export interface FactionDef {
     minAngleEff: number; // efficiency floor vs. bad sun angle
     canopyShade: number; // income multiplier under foliage (own or rival)
     shadeFloor: number; // income multiplier in hard rock shadow (evergreen floor)
-    upkeep: { heart: number; root: number; stem: number; leaf: number };
+    upkeep: { heart: number; root: number; stem: number; leaf: number; cone: number };
   };
   life: {
-    hp: { heart: number; root: number; stem: number; leaf: number };
+    hp: { heart: number; root: number; stem: number; leaf: number; cone: number };
     hpVariance: number; // ± fraction rolled per part
     /** Damage/sec while the colony is at zero energy, applied as a cascade:
      * leaves wither first, then stems+roots, the heart last. */
-    starveDps: { leaf: number; stem: number; root: number; heart: number };
+    starveDps: { leaf: number; stem: number; root: number; heart: number; cone: number };
     hardenAge: number; // stems older than this gain bark once
     hardenBonus: number; // extra hp (and maxHp) from bark
     leafLifespan: [number, number]; // natural needle lifespan range, seconds
     pruneRefund: number; // fraction of build cost returned when pruning
+  };
+  repro: {
+    coneMax: number; // simultaneous cones
+    coneCost: number; // energy to bud a cone
+    coneEnergy: number; // charge needed to arm
+    chargeRate: number; // energy/s diverted into a charging cone
+    armedAutoFire: number; // seconds armed before self-firing (player colonies)
+    aiAutoFire: number; // AI colonies fire this fast
+    seedSpeed: number;
+    seedRange: number;
+    seedStartEnergy: number; // the new seedling's starting energy
+    minSpacing: number; // anchors closer than this on one rock fail to sprout
   };
   growth: {
     actionCooldown: number; // seconds between growth actions
@@ -78,17 +96,37 @@ export interface FactionDef {
 export const PINOPHYTA: FactionDef = {
   id: 'pinophyta',
   name: 'Pinophyta',
-  colors: {
-    stem: 0x5d8a5f,
-    stemOld: 0x47624a,
-    leaf: 0x3ee89c,
-    leafCanopy: 0x2aa877,
-    leafShaded: 0x1d7a56,
-    leafStarving: 0xd8c34a,
-    root: 0x8a6d4f,
-    heart: 0x2fbf7f,
-    heartCore: 0xffd257,
-  },
+  palettes: [
+    {
+      stem: 0x5d8a5f,
+      stemOld: 0x47624a,
+      leaf: 0x3ee89c,
+      leafCanopy: 0x2aa877,
+      leafShaded: 0x1d7a56,
+      leafStarving: 0xd8c34a,
+      root: 0x8a6d4f,
+      heart: 0x2fbf7f,
+      heartCore: 0xffd257,
+      cone: 0x9a6b3f,
+      coneArmed: 0xe8b054,
+      seed: 0xd7f59a,
+    },
+    {
+      // "Rustspire" — the rival Pinophyta colony palette
+      stem: 0x8a5f4a,
+      stemOld: 0x62453a,
+      leaf: 0xe8863e,
+      leafCanopy: 0xb26a34,
+      leafShaded: 0x7a4a26,
+      leafStarving: 0xd8c34a,
+      root: 0x6d5a4f,
+      heart: 0xbf5f2f,
+      heartCore: 0xffb257,
+      cone: 0x7a4b33,
+      coneArmed: 0xff9454,
+      seed: 0xffd2a0,
+    },
+  ],
   behavior: {
     summary:
       'A patient vertical spire. Pinophyta outgrow shade rather than flee it: ' +
@@ -100,17 +138,30 @@ export const PINOPHYTA: FactionDef = {
       { id: 'needles', text: 'Needle every open slot — income before architecture' },
       { id: 'trunk', text: 'Raise the trunk, leaning toward the sun' },
       { id: 'branches', text: 'Extend side branches, longest near the base' },
-      { id: 'mature', text: 'Mature: store energy (cones arrive in M4)' },
+      { id: 'cones', text: 'Ripen seed cones; cast seeds at fresh rock' },
+      { id: 'mature', text: 'Mature: store energy and endure' },
     ],
   },
   life: {
-    hp: { heart: 60, root: 30, stem: 25, leaf: 10 },
+    hp: { heart: 60, root: 30, stem: 25, leaf: 10, cone: 15 },
     hpVariance: 0.2,
-    starveDps: { leaf: 0.8, stem: 0.35, root: 0.35, heart: 0.8 },
+    starveDps: { leaf: 0.8, stem: 0.35, root: 0.35, heart: 0.8, cone: 0.8 },
     hardenAge: 45,
     hardenBonus: 15,
     leafLifespan: [130, 210],
     pruneRefund: 0.4,
+  },
+  repro: {
+    coneMax: 2,
+    coneCost: 8,
+    coneEnergy: 30,
+    chargeRate: 1.6,
+    armedAutoFire: 12,
+    aiAutoFire: 2,
+    seedSpeed: 95,
+    seedRange: 900,
+    seedStartEnergy: 35,
+    minSpacing: 55,
   },
   energy: {
     heartInitial: 45,
@@ -122,7 +173,7 @@ export const PINOPHYTA: FactionDef = {
     minAngleEff: 0.35,
     canopyShade: 0.5,
     shadeFloor: 0.15,
-    upkeep: { heart: 0.15, root: 0.05, stem: 0.06, leaf: 0.1 },
+    upkeep: { heart: 0.15, root: 0.05, stem: 0.06, leaf: 0.1, cone: 0.08 },
   },
   growth: {
     actionCooldown: 0.6,

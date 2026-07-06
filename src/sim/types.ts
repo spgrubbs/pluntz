@@ -4,7 +4,24 @@ import type { ShadeLevel } from './light';
 
 export type FactionId = 'pinophyta';
 
-export type PartKind = 'heart' | 'root' | 'stem' | 'leaf';
+export type PartKind = 'heart' | 'root' | 'stem' | 'leaf' | 'cone';
+
+/** Render-facing happenings; the fx layer turns these into particles. */
+export interface SimEvent {
+  type:
+    | 'impact' // something took damage (power = dmg)
+    | 'partDied'
+    | 'shatter' // debris broke up on rock
+    | 'seedLaunch'
+    | 'seedLand'
+    | 'seedFizzle'
+    | 'sprout';
+  x: number;
+  y: number;
+  kind?: PartKind;
+  faction?: FactionId;
+  power?: number;
+}
 
 /**
  * One node in a plant's part graph. Geometry is stored in the anchor
@@ -28,6 +45,8 @@ export interface Part {
   dead: boolean; // dead parts stay in the array (stable indices); husk render
   hardened: boolean; // old stems gain bark once
   maxAge: number; // natural lifespan (leaves); 0 = immortal
+  charge: number; // cones: energy banked toward a seed
+  armedAt: number; // cones: sim time when fully charged, -1 if not
   shade: ShadeLevel; // leaves only: last light query result
   /**
    * Occlusion group: needles never shade needles of the same group (a branch
@@ -50,7 +69,9 @@ export interface Plant {
   id: number;
   alive: boolean; // false once the heart dies — the whole plant is husk
   faction: FactionId;
+  colonyId: number;
   asteroidId: number;
+  astPos: Vec2; // cached anchor-asteroid position (for event coordinates)
   anchorAngle: number; // radians on the asteroid surface
   up: Vec2; // surface normal at anchor (local frame)
   parts: Part[];
@@ -89,6 +110,34 @@ export interface SunState {
   cycleRate: number; // radians/sec when cycling
 }
 
+/** A colony: one player's (or AI's) empire of plants + shared energy pool. */
+export interface Colony {
+  id: number;
+  name: string;
+  faction: FactionId;
+  isPlayer: boolean;
+  palette: number; // index into the faction's palette list
+  reserve: number; // shared energy pool fed by thriving plants
+}
+
+/** An airborne seed: ballistic, sprouts where it lands. */
+export interface Seed {
+  id: number;
+  colonyId: number;
+  faction: FactionId;
+  pos: Vec2;
+  vel: Vec2;
+  age: number;
+  maxAge: number; // range / speed
+}
+
+export interface Ping {
+  x: number;
+  y: number;
+  colonyId: number;
+  expires: number;
+}
+
 /** A drifting rock: the ambient hazard. Shatters on asteroids and plants. */
 export interface Debris {
   id: number;
@@ -109,7 +158,11 @@ export interface World {
   sun: SunState;
   asteroids: Asteroid[];
   plants: Plant[];
+  colonies: Colony[];
+  seeds: Seed[];
   debris: Debris[];
+  ping: Ping | null;
+  events: SimEvent[]; // drained by the renderer every frame
   nextId: number;
   debrisPerMin: number;
 }
@@ -122,5 +175,6 @@ export interface MapDef {
   sun: { angleDeg: number; cycle: boolean; cyclePeriodSec: number };
   debris?: { perMin: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
-  spawns: { asteroid: number; anchorDeg: number; faction: FactionId }[];
+  colonies: { name: string; faction: FactionId; player?: boolean; palette?: number }[];
+  spawns: { asteroid: number; anchorDeg: number; colony: number }[];
 }

@@ -23,6 +23,12 @@ export const TUNING = {
     asteroidRoughness: 0.16, // radial jitter fraction
   },
 
+  colony: {
+    donateRate: 3, // energy/s a thriving plant (>75% full) feeds the pool
+    drawRate: 5, // energy/s a struggling plant (<35%) may pull from it
+    reserveCap: 150,
+  },
+
   debris: {
     radius: [5, 13] as [number, number],
     ambientSpeed: [16, 42] as [number, number],

@@ -1,15 +1,20 @@
-import { Application, Container } from 'pixi.js';
-import { createWorld, stepWorld, spawnDebris } from './sim/world';
-import { pruneAlongPath } from './sim/plant';
-import type { Asteroid, World } from './sim/types';
+import { Application, Container, Graphics } from 'pixi.js';
+import { createWorld, stepWorld, spawnDebris, setPing } from './sim/world';
+import { pruneAlongPath, fireCone } from './sim/plant';
+import { setEventSink } from './sim/events';
+import type { Asteroid, Plant, World } from './sim/types';
 import { add, dist, norm, scale, sub, fromAngle, type Vec2 } from './sim/vec';
 import { DEV01 } from './content/maps/dev01';
 import { TUNING } from './content/tuning';
+import { FACTIONS } from './content/factions';
 import { Starfield } from './render/starfield';
 import { WorldView } from './render/worldView';
 import { PlantView } from './render/plantView';
 import { DebrisView } from './render/debrisView';
 import { PruneView } from './render/pruneView';
+import { FxView } from './render/fxView';
+import { SeedView } from './render/seedView';
+import { PingView } from './render/pingView';
 import { Camera } from './ui/camera';
 import { DebugPanel } from './ui/debugPanel';
 import { Inspector } from './ui/inspector';
@@ -29,6 +34,8 @@ async function boot(): Promise<void> {
   const urlSeed = new URLSearchParams(location.search).get('seed');
   let seed = urlSeed ? Number(urlSeed) >>> 0 : 1337;
   let world: World = createWorld(DEV01, seed);
+  setEventSink(world.events);
+  let playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
 
   // --- Scene graph -------------------------------------------------------------
   let starfield = new Starfield(world.width, world.height, seed);
@@ -37,22 +44,56 @@ async function boot(): Promise<void> {
   const plantView = new PlantView();
   const debrisView = new DebrisView();
   const pruneView = new PruneView();
-  worldRoot.addChild(worldView.container, plantView.container, debrisView.g, pruneView.g);
+  const fxView = new FxView();
+  const seedView = new SeedView();
+  const pingView = new PingView();
+  const aimG = new Graphics();
+  worldRoot.addChild(
+    worldView.container,
+    plantView.container,
+    debrisView.g,
+    seedView.g,
+    fxView.g,
+    pingView.g,
+    pruneView.g,
+    aimG,
+  );
   app.stage.addChild(starfield.container, worldRoot);
 
   // --- Interaction state -------------------------------------------------------
   let speed = 1;
   let moveRocks = false;
   let pruneMode = false;
+  let pingMode = false;
   let prunePath: Vec2[] | null = null;
   let draggedRock: Asteroid | null = null;
+  let aiming: { plant: Plant; coneId: number; pos: Vec2 } | null = null;
   const inspector = new Inspector();
+
+  /** Find an armed player cone near a world position (for the aim-drag verb). */
+  function pickArmedCone(at: Vec2, radius: number): { plant: Plant; coneId: number } | null {
+    for (const plant of world.plants) {
+      if (!plant.alive || plant.colonyId !== playerColonyId) continue;
+      for (const p of plant.parts) {
+        if (p.dead || p.kind !== 'cone' || p.armedAt < 0) continue;
+        const x = plant.astPos.x + p.tip.x;
+        const y = plant.astPos.y + p.tip.y;
+        if (Math.hypot(x - at.x, y - at.y) < radius) return { plant, coneId: p.id };
+      }
+    }
+    return null;
+  }
 
   const homeAst = world.asteroids[0];
   const camera = new Camera(app.canvas, world.width, world.height, {
     onDragStart(worldPos: Vec2): boolean {
       if (pruneMode) {
         prunePath = [worldPos];
+        return true;
+      }
+      const cone = pickArmedCone(worldPos, 30 / camera.zoom);
+      if (cone) {
+        aiming = { ...cone, pos: worldPos };
         return true;
       }
       if (!moveRocks) return false;
@@ -66,6 +107,10 @@ async function boot(): Promise<void> {
         if (dist(last, worldPos) > 4) prunePath.push(worldPos);
         return;
       }
+      if (aiming) {
+        aiming.pos = worldPos;
+        return;
+      }
       if (draggedRock) {
         draggedRock.pos.x = worldPos.x;
         draggedRock.pos.y = worldPos.y;
@@ -73,30 +118,58 @@ async function boot(): Promise<void> {
     },
     onDragEnd(): void {
       if (prunePath) {
-        for (const plant of world.plants) pruneAlongPath(world, plant, prunePath);
+        for (const plant of world.plants) {
+          if (plant.colonyId === playerColonyId) pruneAlongPath(world, plant, prunePath);
+        }
         prunePath = null;
+        return;
+      }
+      if (aiming) {
+        const cone = aiming.plant.parts[aiming.coneId];
+        const from = add(aiming.plant.astPos, cone.tip);
+        const dir = sub(aiming.pos, from);
+        if (Math.hypot(dir.x, dir.y) > 25) fireCone(world, aiming.plant, aiming.coneId, dir);
+        aiming = null;
         return;
       }
       draggedRock = null;
     },
     onTap(worldPos: Vec2): void {
       if (pruneMode) return; // taps in prune mode are just aborted swipes
+      if (pingMode) {
+        setPing(world, playerColonyId, worldPos);
+        pingMode = false;
+        pingBtn.classList.remove('active');
+        return;
+      }
       const hit = pickPlant(world, worldPos, 26 / camera.zoom);
       if (hit !== null) inspector.show(hit);
       else inspector.hide();
     },
   });
 
-  // --- Action bar (player verbs — Prune is the first) ---------------------------
+  // --- Action bar (player verbs) -------------------------------------------------
   const actionBar = document.createElement('div');
   actionBar.className = 'actionbar';
   const pruneBtn = document.createElement('button');
   pruneBtn.textContent = '✂ prune';
   pruneBtn.addEventListener('click', () => {
     pruneMode = !pruneMode;
+    pingMode = false;
+    pingBtn.classList.remove('active');
     prunePath = null;
     pruneBtn.classList.toggle('active', pruneMode);
   });
+  const pingBtn = document.createElement('button');
+  pingBtn.textContent = '◎ ping';
+  pingBtn.addEventListener('click', () => {
+    pingMode = !pingMode;
+    pruneMode = false;
+    prunePath = null;
+    pruneBtn.classList.remove('active');
+    pingBtn.classList.toggle('active', pingMode);
+  });
+  actionBar.appendChild(pingBtn);
   actionBar.appendChild(pruneBtn);
   document.getElementById('ui')!.appendChild(actionBar);
   camera.x = homeAst.pos.x;
@@ -129,9 +202,17 @@ async function boot(): Promise<void> {
       const vel = scale(norm(sub(target, from)), TUNING.debris.debugSpeed);
       spawnDebris(world, from, vel, world.rng.range(8, 13));
     },
+    grantEnergy: () => {
+      for (const plant of world.plants) {
+        if (plant.alive) plant.energy = Math.min(plant.energy + 60, plant.capacity);
+      }
+    },
     reset: (reseed) => {
       if (reseed) seed = (Date.now() % 0xffffffff) >>> 0;
       world = createWorld(DEV01, seed);
+      setEventSink(world.events);
+      playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
+      aiming = null;
       inspector.hide();
       app.stage.removeChild(starfield.container);
       starfield = new Starfield(world.width, world.height, seed);
@@ -170,7 +251,29 @@ async function boot(): Promise<void> {
     worldView.update(world);
     plantView.update(world);
     debrisView.update(world);
+    seedView.update(world);
+    pingView.update(world);
     pruneView.update(prunePath);
+
+    // particles: drain sim events, shed wound motes, integrate
+    fxView.ingest(world.events);
+    world.events.length = 0;
+    fxView.ambientWounds(world, frame);
+    fxView.update(frame);
+
+    // aim affordance: range ring + aim line while dragging from an armed cone
+    aimG.clear();
+    if (aiming) {
+      const cone = aiming.plant.parts[aiming.coneId];
+      const from = add(aiming.plant.astPos, cone.tip);
+      const range = FACTIONS[aiming.plant.faction].repro.seedRange;
+      aimG.circle(from.x, from.y, range).stroke({ width: 1.5, color: 0xd7f59a, alpha: 0.12 });
+      aimG.moveTo(from.x, from.y)
+        .lineTo(aiming.pos.x, aiming.pos.y)
+        .stroke({ width: 2, color: 0xd7f59a, alpha: 0.7 });
+      aimG.circle(aiming.pos.x, aiming.pos.y, 7).stroke({ width: 2, color: 0xd7f59a, alpha: 0.9 });
+    }
+
     inspector.update(world);
 
     panel.update({

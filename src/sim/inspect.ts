@@ -1,6 +1,6 @@
 import type { Plant } from './types';
 import { FACTIONS, type IntentId } from '../content/factions';
-import { leafDeficit } from './plant';
+import { leafDeficit, aliveConeCount } from './plant';
 
 export interface PlantStatus {
   intent: IntentId;
@@ -61,9 +61,29 @@ export function plantStatus(plant: Plant): PlantStatus {
     aim = `extending ${budsActive} side branch${budsActive === 1 ? '' : 'es'}`;
     cost = g.stemCost;
   } else {
-    intent = 'mature';
-    aim = 'canopy complete — storing energy';
-    cost = 0;
+    const cones = plant.parts.filter((p) => !p.dead && p.kind === 'cone');
+    const armed = cones.find((p) => p.armedAt >= 0);
+    const charging = cones.filter((p) => p.armedAt < 0);
+    if (armed) {
+      intent = 'cones';
+      aim = 'seed cone armed — drag from it to aim, or it fires itself';
+      cost = 0;
+    } else if (charging.length > 0) {
+      intent = 'cones';
+      const pct = Math.round(
+        (Math.max(...charging.map((p) => p.charge)) / f.repro.coneEnergy) * 100,
+      );
+      aim = `ripening a seed cone (${pct}%)`;
+      cost = 0;
+    } else if (aliveConeCount(plant) < f.repro.coneMax) {
+      intent = 'cones';
+      aim = 'budding a seed cone';
+      cost = f.repro.coneCost;
+    } else {
+      intent = 'mature';
+      aim = 'canopy complete — storing energy';
+      cost = 0;
+    }
   }
 
   const saving = cost > 0 && spendable < cost;

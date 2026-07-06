@@ -46,6 +46,7 @@ export class Inspector {
       <div class="bar"><div data-ref="bar"></div></div>
       <div class="stat-row"><span>net energy</span><b data-ref="net"></b></div>
       <div class="stat-row"><span>needles</span><b data-ref="needles"></b></div>
+      <div class="stat-row"><span>wounds</span><b data-ref="wounds"></b></div>
       <details data-ref="secBehavior">
         <summary>behavior — what &amp; why</summary>
         <p class="desc">${f.behavior.summary}</p>
@@ -92,7 +93,19 @@ export class Inspector {
       r.net.textContent = '—';
       r.net.style.color = '#8fa0bd';
       r.needles.textContent = 'dropped';
+      r.wounds.textContent = '—';
     } else {
+      const wounded = plant.parts.filter((p) => !p.dead && p.hp < p.maxHp * 0.98);
+      if (wounded.length === 0) {
+        r.wounds.textContent = 'none';
+        r.wounds.style.color = '#8fa0bd';
+      } else {
+        const worst = Math.round(
+          Math.min(...wounded.map((p) => p.hp / p.maxHp)) * 100,
+        );
+        r.wounds.textContent = `${wounded.length} wounded · worst at ${worst}% hp`;
+        r.wounds.style.color = '#e8b054';
+      }
       const pct = Math.round((plant.energy / plant.capacity) * 100);
       r.energy.textContent = `${plant.energy.toFixed(1)} / ${plant.capacity} (${pct}%)`;
       r.bar.style.width = `${pct}%`;

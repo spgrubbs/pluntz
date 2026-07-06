@@ -33,6 +33,7 @@ describe('death & husks', () => {
     blocker.pos.x = home.pos.x + Math.cos(w.sun.angle) * 600;
     blocker.pos.y = home.pos.y + Math.sin(w.sun.angle) * 600;
     plant.energy = 0; // skip the reserve drain, straight to starvation
+    w.colonies[0].reserve = 0; // and empty the colony pool it would sip from
 
     // needles wither first
     for (let i = 0; i < 300; i++) stepWorld(w, TUNING.simDt); // 30s

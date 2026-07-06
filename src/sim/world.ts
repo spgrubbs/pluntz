@@ -1,10 +1,12 @@
 import { v, fromAngle, scale, add, norm, sub, dist, distToSegment, len } from './vec';
 import type { Vec2 } from './vec';
 import { makeRng } from './rng';
-import type { Asteroid, Debris, MapDef, World } from './types';
+import type { Asteroid, Debris, FactionId, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
+import { FACTIONS } from '../content/factions';
 import { createPlant, stepPlant, damagePart } from './plant';
 import type { CanopySeg } from './light';
+import { emit, setEventSink } from './events';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
   const rng = makeRng(seed);
@@ -36,7 +38,11 @@ export function createWorld(map: MapDef, seed: number): World {
     },
     asteroids: [],
     plants: [],
+    colonies: [],
+    seeds: [],
     debris: [],
+    ping: null,
+    events: [],
     nextId: 1,
     debrisPerMin: map.debris?.perMin ?? 0,
   };
@@ -50,21 +56,118 @@ export function createWorld(map: MapDef, seed: number): World {
     };
     world.asteroids.push(ast);
   }
+  for (const c of map.colonies) {
+    world.colonies.push({
+      id: world.nextId++,
+      name: c.name,
+      faction: c.faction,
+      isPlayer: c.player ?? false,
+      palette: c.palette ?? 0,
+      reserve: 0,
+    });
+  }
   for (const s of map.spawns) {
     const ast = world.asteroids[s.asteroid];
-    world.plants.push(createPlant(world, ast, s.anchorDeg * (Math.PI / 180), s.faction));
+    const colony = world.colonies[s.colony];
+    world.plants.push(
+      createPlant(world, ast, s.anchorDeg * (Math.PI / 180), colony.faction, colony.id),
+    );
   }
   return world;
 }
 
+/** Try to sprout a new plant on an asteroid surface; fails when crowded. */
+export function sproutAt(
+  world: World,
+  colonyId: number,
+  faction: FactionId,
+  ast: Asteroid,
+  angleRad: number,
+): boolean {
+  const R = FACTIONS[faction].repro;
+  const anchor = add(ast.pos, scale(fromAngle(angleRad), ast.radius));
+  for (const pl of world.plants) {
+    if (!pl.alive || pl.asteroidId !== ast.id) continue;
+    const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
+    if (dist(anchor, other) < R.minSpacing) return false;
+  }
+  const plant = createPlant(world, ast, angleRad, faction, colonyId);
+  plant.energy = R.seedStartEnergy;
+  world.plants.push(plant);
+  emit({ type: 'sprout', x: anchor.x, y: anchor.y, faction });
+  return true;
+}
+
+/** Place (or move) a colony's ping — the attention verb. */
+export function setPing(world: World, colonyId: number, pos: Vec2): void {
+  world.ping = { x: pos.x, y: pos.y, colonyId, expires: world.time + 60 };
+}
+
+function stepSeeds(world: World, dt: number): void {
+  for (let i = world.seeds.length - 1; i >= 0; i--) {
+    const s = world.seeds[i];
+    s.pos.x += s.vel.x * dt;
+    s.pos.y += s.vel.y * dt;
+    s.age += dt;
+    if (s.age > s.maxAge) {
+      emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+      world.seeds.splice(i, 1);
+      continue;
+    }
+    for (const ast of world.asteroids) {
+      if (dist(s.pos, ast.pos) < ast.radius + 4) {
+        const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
+        const ok = sproutAt(world, s.colonyId, s.faction, ast, angle);
+        const at = add(ast.pos, scale(fromAngle(angle), ast.radius));
+        emit({
+          type: ok ? 'seedLand' : 'seedFizzle',
+          x: at.x,
+          y: at.y,
+          faction: s.faction,
+        });
+        world.seeds.splice(i, 1);
+        break;
+      }
+    }
+  }
+}
+
+/** Thriving plants feed the colony pool; struggling ones draw from it. */
+function shareColonyEnergy(world: World, dt: number): void {
+  const SH = TUNING.colony;
+  for (const plant of world.plants) {
+    if (!plant.alive) continue;
+    const colony = world.colonies.find((c) => c.id === plant.colonyId);
+    if (!colony) continue;
+    const cap = plant.capacity;
+    if (plant.energy > cap * 0.75 && colony.reserve < SH.reserveCap) {
+      const t = Math.min(
+        SH.donateRate * dt,
+        plant.energy - cap * 0.75,
+        SH.reserveCap - colony.reserve,
+      );
+      plant.energy -= t;
+      colony.reserve += t;
+    } else if (plant.energy < cap * 0.35 && colony.reserve > 0) {
+      const t = Math.min(SH.drawRate * dt, colony.reserve, cap * 0.35 - plant.energy);
+      plant.energy += t;
+      colony.reserve -= t;
+    }
+  }
+}
+
 export function stepWorld(world: World, dt: number): void {
+  setEventSink(world.events);
   world.time += dt;
   world.tick++;
   if (world.sun.cycle) {
     world.sun.angle = (world.sun.angle + world.sun.cycleRate * dt) % (Math.PI * 2);
   }
+  if (world.ping && world.time > world.ping.expires) world.ping = null;
   const canopy = collectCanopy(world);
   for (const plant of world.plants) stepPlant(world, plant, dt, canopy);
+  shareColonyEnergy(world, dt);
+  stepSeeds(world, dt);
   stepDebris(world, dt);
 }
 
@@ -144,6 +247,7 @@ function stepDebris(world: World, dt: number): void {
     if (!destroyed) {
       for (const a of world.asteroids) {
         if (dist(d.pos, a.pos) < d.radius + a.radius) {
+          emit({ type: 'shatter', x: d.pos.x, y: d.pos.y, power: d.radius });
           destroyed = true;
           break;
         }
@@ -192,6 +296,7 @@ export function hashWorld(world: World): number {
       mix(part.tip.x);
       mix(part.tip.y);
       mix(part.hp * 100);
+      mix(part.charge * 100);
       mix(part.dead ? 1 : 0);
     }
   }
@@ -200,5 +305,11 @@ export function hashWorld(world: World): number {
     mix(d.pos.x);
     mix(d.pos.y);
   }
+  mix(world.seeds.length);
+  for (const s of world.seeds) {
+    mix(s.pos.x);
+    mix(s.pos.y);
+  }
+  for (const c of world.colonies) mix(c.reserve * 100);
   return h;
 }
