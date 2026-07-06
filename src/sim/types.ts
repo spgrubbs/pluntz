@@ -165,6 +165,11 @@ export interface World {
   events: SimEvent[]; // drained by the renderer every frame
   nextId: number;
   debrisPerMin: number;
+  /** Round timer: after roundSec the sun dims to force an ending. 0 = endless. */
+  roundSec: number;
+  sunFactor: number; // 1 normally, ramps down in sudden death
+  roundState: 'playing' | 'won' | 'lost';
+  endedAt: number; // sim time the round ended, -1 while playing
 }
 
 export interface MapDef {
@@ -174,6 +179,7 @@ export interface MapDef {
   height: number;
   sun: { angleDeg: number; cycle: boolean; cyclePeriodSec: number };
   debris?: { perMin: number };
+  roundSec?: number;
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
   colonies: { name: string; faction: FactionId; player?: boolean; palette?: number }[];
   spawns: { asteroid: number; anchorDeg: number; colony: number }[];

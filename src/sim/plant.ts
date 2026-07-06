@@ -117,7 +117,7 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     else shadowLeaves++;
     const shadeMult = shade === 0 ? 1 : shade === 1 ? f.energy.canopyShade : f.energy.shadeFloor;
     const angleEff = Math.max(Math.abs(dot(p.dir, toSun)), f.energy.minAngleEff);
-    income += f.energy.leafIncome * angleEff * shadeMult;
+    income += f.energy.leafIncome * angleEff * shadeMult * world.sunFactor;
   }
   plant.lastIncome = income;
   plant.lastUpkeep = upkeep;

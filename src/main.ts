@@ -4,7 +4,7 @@ import { pruneAlongPath, fireCone } from './sim/plant';
 import { setEventSink } from './sim/events';
 import type { Asteroid, Plant, World } from './sim/types';
 import { add, dist, norm, scale, sub, fromAngle, type Vec2 } from './sim/vec';
-import { DEV01 } from './content/maps/dev01';
+import { MAPS, DEFAULT_MAP } from './content/maps/index';
 import { TUNING } from './content/tuning';
 import { FACTIONS } from './content/factions';
 import { Starfield } from './render/starfield';
@@ -31,9 +31,11 @@ async function boot(): Promise<void> {
   document.body.appendChild(app.canvas);
 
   // --- World -----------------------------------------------------------------
-  const urlSeed = new URLSearchParams(location.search).get('seed');
+  const params = new URLSearchParams(location.search);
+  const urlSeed = params.get('seed');
   let seed = urlSeed ? Number(urlSeed) >>> 0 : 1337;
-  let world: World = createWorld(DEV01, seed);
+  const map = MAPS[params.get('map') ?? DEFAULT_MAP] ?? MAPS[DEFAULT_MAP];
+  let world: World = createWorld(map, seed);
   setEventSink(world.events);
   let playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
 
@@ -207,18 +209,75 @@ async function boot(): Promise<void> {
         if (plant.alive) plant.energy = Math.min(plant.energy + 60, plant.capacity);
       }
     },
-    reset: (reseed) => {
-      if (reseed) seed = (Date.now() % 0xffffffff) >>> 0;
-      world = createWorld(DEV01, seed);
-      setEventSink(world.events);
-      playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
-      aiming = null;
-      inspector.hide();
-      app.stage.removeChild(starfield.container);
-      starfield = new Starfield(world.width, world.height, seed);
-      app.stage.addChildAt(starfield.container, 0);
-    },
+    reset: (reseed) => resetWorld(reseed),
   });
+
+  function resetWorld(reseed: boolean): void {
+    if (reseed) seed = (Date.now() % 0xffffffff) >>> 0;
+    world = createWorld(map, seed);
+    setEventSink(world.events);
+    playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
+    aiming = null;
+    bannerShown = false;
+    banner.classList.remove('open');
+    inspector.hide();
+    app.stage.removeChild(starfield.container);
+    starfield = new Starfield(world.width, world.height, seed);
+    app.stage.addChildAt(starfield.container, 0);
+  }
+
+  // --- Round chip + end-of-round banner ------------------------------------------
+  const roundChip = document.createElement('div');
+  roundChip.className = 'roundchip';
+  document.getElementById('ui')!.appendChild(roundChip);
+  const banner = document.createElement('div');
+  banner.className = 'banner';
+  document.getElementById('ui')!.appendChild(banner);
+  let bannerShown = false;
+
+  function fmtTime(t: number): string {
+    const s = Math.max(0, Math.floor(t));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function updateRoundUi(): void {
+    if (world.colonies.length < 2) {
+      roundChip.style.display = 'none';
+      return;
+    }
+    roundChip.style.display = 'block';
+    const counts = world.colonies
+      .map((c) => {
+        const n = world.plants.filter((p) => p.alive && p.colonyId === c.id).length;
+        return `${c.name} ${n}`;
+      })
+      .join(' · ');
+    let clock: string;
+    if (world.roundState !== 'playing') clock = 'round over';
+    else if (world.roundSec > 0 && world.time > world.roundSec) clock = '☀ THE SUN FADES';
+    else if (world.roundSec > 0) clock = `☀ fades in ${fmtTime(world.roundSec - world.time)}`;
+    else clock = '';
+    roundChip.textContent = clock ? `${counts}  —  ${clock}` : counts;
+
+    if (world.roundState !== 'playing' && !bannerShown) {
+      bannerShown = true;
+      const t = fmtTime(world.endedAt);
+      const rival = world.colonies.find((c) => !c.isPlayer)?.name ?? 'the rival';
+      const won = world.roundState === 'won';
+      banner.innerHTML = `
+        <h1 class="${won ? 'win' : 'loss'}">${won ? 'OVERGROWTH' : 'EXTINCTION'}</h1>
+        <p>${
+          won
+            ? `The void is yours. The last ${rival} heartseed went dark at ${t}.`
+            : `Your last heartseed went dark at ${t}. The ${rival} overgrow your bones.`
+        }</p>
+        <div class="btn-row"><button class="again">grow again</button></div>`;
+      banner.classList.add('open');
+      (banner.querySelector('.again') as HTMLElement).addEventListener('click', () => {
+        resetWorld(true);
+      });
+    }
+  }
 
   // --- Fixed-timestep loop ---------------------------------------------------------
   let acc = 0;
@@ -275,6 +334,7 @@ async function boot(): Promise<void> {
     }
 
     inspector.update(world);
+    updateRoundUi();
 
     panel.update({
       fps: fpsEma,

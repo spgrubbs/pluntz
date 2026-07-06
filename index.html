@@ -92,6 +92,56 @@
         color: #aef5cf;
         border-color: #3f8a67;
       }
+      .roundchip {
+        position: absolute;
+        top: max(8px, env(safe-area-inset-top));
+        right: 8px;
+        background: rgba(8, 12, 24, 0.82);
+        border: 1px solid #2a3550;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+        color: #b8c4d8;
+        max-width: 46vw;
+        text-align: right;
+      }
+      .banner {
+        position: absolute;
+        left: 50%;
+        top: 38%;
+        transform: translate(-50%, -50%);
+        background: rgba(6, 9, 18, 0.94);
+        border: 1px solid #2a3550;
+        border-radius: 14px;
+        padding: 22px 30px;
+        text-align: center;
+        display: none;
+        max-width: min(420px, calc(100vw - 40px));
+      }
+      .banner.open {
+        display: block;
+      }
+      .banner h1 {
+        margin: 0 0 10px;
+        font-size: 26px;
+        letter-spacing: 4px;
+      }
+      .banner h1.win {
+        color: #7fe8b0;
+        text-shadow: 0 0 18px rgba(127, 232, 176, 0.5);
+      }
+      .banner h1.loss {
+        color: #f28a7a;
+        text-shadow: 0 0 18px rgba(242, 138, 122, 0.4);
+      }
+      .banner p {
+        color: #8fa0bd;
+        line-height: 1.5;
+        margin: 0 0 14px;
+      }
+      .banner .btn-row {
+        justify-content: center;
+      }
       .actionbar {
         position: absolute;
         right: 10px;

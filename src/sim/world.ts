@@ -45,6 +45,10 @@ export function createWorld(map: MapDef, seed: number): World {
     events: [],
     nextId: 1,
     debrisPerMin: map.debris?.perMin ?? 0,
+    roundSec: map.roundSec ?? 0,
+    sunFactor: 1,
+    roundState: 'playing',
+    endedAt: -1,
   };
   for (const def of map.asteroids) {
     const ast: Asteroid = {
@@ -114,6 +118,27 @@ function stepSeeds(world: World, dt: number): void {
       world.seeds.splice(i, 1);
       continue;
     }
+    // hardened seeds are slow cannonballs: they bruise rival growth they hit
+    let hitRival = false;
+    for (const plant of world.plants) {
+      if (!plant.alive || plant.colonyId === s.colonyId) continue;
+      if (dist(s.pos, plant.astPos) > 320) continue;
+      for (const p of plant.parts) {
+        if (p.dead) continue;
+        const a = add(plant.astPos, p.base);
+        const b = add(plant.astPos, p.tip);
+        if (distToSegment(s.pos, a, b) < 5) {
+          damagePart(plant, p.id, 14);
+          hitRival = true;
+          break;
+        }
+      }
+      if (hitRival) break;
+    }
+    if (hitRival) {
+      world.seeds.splice(i, 1);
+      continue;
+    }
     for (const ast of world.asteroids) {
       if (dist(s.pos, ast.pos) < ast.radius + 4) {
         const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
@@ -164,11 +189,96 @@ export function stepWorld(world: World, dt: number): void {
     world.sun.angle = (world.sun.angle + world.sun.cycleRate * dt) % (Math.PI * 2);
   }
   if (world.ping && world.time > world.ping.expires) world.ping = null;
+
+  // sudden death: past the round timer the sun fades over 3 minutes
+  if (world.roundSec > 0 && world.time > world.roundSec) {
+    const t = Math.min((world.time - world.roundSec) / 180, 1);
+    world.sunFactor = 1 - t * 0.88;
+  }
+
   const canopy = collectCanopy(world);
   for (const plant of world.plants) stepPlant(world, plant, dt, canopy);
   shareColonyEnergy(world, dt);
   stepSeeds(world, dt);
   stepDebris(world, dt);
+  if (world.tick % 5 === 0) applyContactDamage(world, dt * 5);
+  if (world.tick % 10 === 0) checkRoundEnd(world);
+}
+
+/** Approximate shortest distance between two short segments. */
+function segSegDist(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2): number {
+  return Math.min(
+    distToSegment(a1, b1, b2),
+    distToSegment(a2, b1, b2),
+    distToSegment(b1, a1, a2),
+    distToSegment(b2, a1, a2),
+  );
+}
+
+const CONTACT_DPS: Record<string, number> = {
+  leaf: 3.0,
+  cone: 3.0,
+  stem: 0.8,
+  heart: 1.5,
+  root: 0,
+};
+
+/**
+ * Overgrowth warfare: where rival colonies' living tissue touches, both
+ * sides take slow crushing damage — soft parts (needles, cones) lose fast,
+ * hardened wood grinds slowly. Runs every 5th tick.
+ */
+function applyContactDamage(world: World, dt: number): void {
+  const plants = world.plants;
+  for (let i = 0; i < plants.length; i++) {
+    const A = plants[i];
+    if (!A.alive) continue;
+    for (let j = i + 1; j < plants.length; j++) {
+      const B = plants[j];
+      if (!B.alive || B.colonyId === A.colonyId) continue;
+      // broadphase: gardens can only touch if their rocks are close
+      if (dist(A.astPos, B.astPos) > 620) continue;
+      for (const pa of A.parts) {
+        if (pa.dead || pa.kind === 'root') continue;
+        const a1 = add(A.astPos, pa.base);
+        const a2 = add(A.astPos, pa.tip);
+        for (const pb of B.parts) {
+          if (pb.dead || pb.kind === 'root') continue;
+          const b1 = add(B.astPos, pb.base);
+          const b2 = add(B.astPos, pb.tip);
+          if (segSegDist(a1, a2, b1, b2) < 3.5) {
+            damagePart(A, pa.id, CONTACT_DPS[pa.kind] * dt);
+            damagePart(B, pb.id, CONTACT_DPS[pb.kind] * dt);
+            if (!A.alive) return;
+            if (!B.alive) break;
+          }
+        }
+        if (!B.alive) break;
+      }
+    }
+  }
+}
+
+function checkRoundEnd(world: World): void {
+  if (world.roundState !== 'playing' || world.colonies.length < 2) return;
+  const aliveByColony = new Map<number, number>();
+  for (const c of world.colonies) aliveByColony.set(c.id, 0);
+  for (const p of world.plants) {
+    if (p.alive) aliveByColony.set(p.colonyId, (aliveByColony.get(p.colonyId) ?? 0) + 1);
+  }
+  const player = world.colonies.find((c) => c.isPlayer);
+  if (!player) return;
+  const playerAlive = (aliveByColony.get(player.id) ?? 0) > 0;
+  const rivalsAlive = world.colonies.some(
+    (c) => !c.isPlayer && (aliveByColony.get(c.id) ?? 0) > 0,
+  );
+  if (!playerAlive) {
+    world.roundState = 'lost';
+    world.endedAt = world.time;
+  } else if (!rivalsAlive) {
+    world.roundState = 'won';
+    world.endedAt = world.time;
+  }
 }
 
 /** Spawn a drifting rock. Exposed for the debug panel and tests. */

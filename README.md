@@ -5,8 +5,9 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M4 — reproduction: seed cones, aimed shots across the void, sprouting,
-  colony energy pools, the Ping verb, impact particles, and visible part health.
+- **Status:** M5 — the first real round: Verdance (you) vs Rustspire (AI) on the
+  *First Contact* map. Shading warfare, overgrowth contact damage, seed strikes,
+  domination win/lose, and a 15-minute timer before the sun fades.
 
 ## Development
 
@@ -21,7 +22,21 @@ npm run build    # typecheck + production bundle in dist/
 
 **URL params:** `?seed=123` fixes the world seed (also shown in the debug panel).
 
-## Current test script (M4)
+## Current test script (M5)
+
+1. Open the default map (**First Contact**): you're the green Verdance colony (west);
+   the rust-orange **Rustspire** AI starts east and fires its cones fast. The chip at
+   top right tracks living plants per colony and the sun-fade countdown.
+2. Race for the rich middle rock (purple-veined). Ping it to prioritize it; aim armed
+   cones by hand for precision shots. Seeds that strike rival growth bruise it.
+3. Where canopies meet, **overgrowth warfare**: soft needles die fast at contact,
+   hardened trunks grind slowly. Shade their canopy; prune your losses.
+4. Win by extinguishing every Rustspire heartseed (**OVERGROWTH**), lose by losing all
+   of yours (**EXTINCTION**). At 15:00 the sun fades over 3 minutes — photosynthesis
+   collapses and the round resolves by starvation.
+5. Sandbox without a rival: add `?map=dev01` to the URL. `?seed=N` for reproducible maps.
+
+## Earlier scripts (M4)
 
 1. **Cones:** let the tree mature (8× helps) — cone buds appear on high tips with a
    charge arc, then pulse gold when armed. Left alone ~12s, an armed cone fires itself

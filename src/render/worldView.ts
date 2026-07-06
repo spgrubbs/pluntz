@@ -104,14 +104,18 @@ export class WorldView {
       }
     }
 
-    // --- Sun disc + glow + faint parallel rays -------------------------------
+    // --- Sun disc + glow + faint parallel rays (dims in sudden death) --------
+    const dim = world.sunFactor;
     const sunPos = scale(toSun, diag * 0.62);
     const s = this.sun;
     s.clear();
-    s.circle(sunPos.x, sunPos.y, 260).fill({ color: 0xfff2c9, alpha: 0.05 });
-    s.circle(sunPos.x, sunPos.y, 150).fill({ color: 0xfff2c9, alpha: 0.09 });
-    s.circle(sunPos.x, sunPos.y, 80).fill({ color: 0xfff6da, alpha: 0.35 });
-    s.circle(sunPos.x, sunPos.y, 52).fill({ color: 0xfffbef });
+    s.circle(sunPos.x, sunPos.y, 260).fill({ color: 0xfff2c9, alpha: 0.05 * dim });
+    s.circle(sunPos.x, sunPos.y, 150).fill({ color: 0xfff2c9, alpha: 0.09 * dim });
+    s.circle(sunPos.x, sunPos.y, 80).fill({ color: 0xfff6da, alpha: 0.35 * dim });
+    s.circle(sunPos.x, sunPos.y, 52).fill({
+      color: dim > 0.5 ? 0xfffbef : 0xffcf9e,
+      alpha: 0.35 + dim * 0.65,
+    });
 
     const r = this.rays;
     r.clear();
@@ -122,7 +126,7 @@ export class WorldView {
       const end = add(start, scale(toSun, -diag * 1.35));
       r.moveTo(start.x, start.y)
         .lineTo(end.x, end.y)
-        .stroke({ width: 2, color: 0xfff2c9, alpha: 0.035 });
+        .stroke({ width: 2, color: 0xfff2c9, alpha: 0.035 * dim });
     }
   }
 }
