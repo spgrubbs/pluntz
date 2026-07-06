@@ -1,10 +1,16 @@
 import type { Plant, World } from '../sim/types';
 import { FACTIONS } from '../content/factions';
+import { plantStatus } from '../sim/inspect';
 
-/** Bottom card shown when tapping a plant. Live-updates while open. */
+/**
+ * Bottom card shown when tapping a plant. The DOM is built once per plant so
+ * the expandable sections keep their open/closed state; only values update.
+ */
 export class Inspector {
   private el = document.getElementById('inspector')!;
   private plantId: number | null = null;
+  private builtFor: number | null = null;
+  private refs: Record<string, HTMLElement> = {};
 
   show(plantId: number): void {
     this.plantId = plantId;
@@ -13,6 +19,7 @@ export class Inspector {
 
   hide(): void {
     this.plantId = null;
+    this.builtFor = null;
     this.el.classList.remove('open');
   }
 
@@ -23,25 +30,87 @@ export class Inspector {
       this.hide();
       return;
     }
-    this.el.innerHTML = renderCard(plant);
+    if (this.builtFor !== plant.id) this.build(plant);
+    this.refresh(plant);
   }
-}
 
-function renderCard(plant: Plant): string {
-  const f = FACTIONS[plant.faction];
-  const net = plant.lastIncome - plant.lastUpkeep;
-  const netStr = `${net >= 0 ? '+' : ''}${net.toFixed(2)}/s`;
-  const netColor = net >= 0 ? '#7fe8b0' : '#f28a7a';
-  const stems = plant.parts.filter((p) => p.kind === 'stem').length;
-  const pct = Math.round((plant.energy / plant.capacity) * 100);
-  const t = Math.floor(plant.age);
-  return `
-    <h3>${f.name.toUpperCase()}</h3>
-    <div class="stat-row"><span>energy</span><b>${plant.energy.toFixed(1)} / ${plant.capacity} (${pct}%)</b></div>
-    <div class="bar"><div style="width:${pct}%"></div></div>
-    <div class="stat-row"><span>income / upkeep</span><b>${plant.lastIncome.toFixed(2)} / ${plant.lastUpkeep.toFixed(2)}</b></div>
-    <div class="stat-row"><span>net</span><b style="color:${netColor}">${netStr}</b></div>
-    <div class="stat-row"><span>needles lit</span><b>${plant.litLeaves} / ${plant.totalLeaves}</b></div>
-    <div class="stat-row"><span>stems / parts</span><b>${stems} / ${plant.parts.length}</b></div>
-    <div class="stat-row"><span>age</span><b>${Math.floor(t / 60)}m ${t % 60}s</b></div>`;
+  private build(plant: Plant): void {
+    const f = FACTIONS[plant.faction];
+    const prios = f.behavior.priorities
+      .map((p) => `<li data-prio="${p.id}">${p.text}</li>`)
+      .join('');
+    this.el.innerHTML = `
+      <h3>${f.name.toUpperCase()}</h3>
+      <div class="aim" data-ref="aim"></div>
+      <div class="stat-row"><span>energy</span><b data-ref="energy"></b></div>
+      <div class="bar"><div data-ref="bar"></div></div>
+      <div class="stat-row"><span>net energy</span><b data-ref="net"></b></div>
+      <div class="stat-row"><span>needles</span><b data-ref="needles"></b></div>
+      <details data-ref="secBehavior">
+        <summary>behavior — what &amp; why</summary>
+        <p class="desc">${f.behavior.summary}</p>
+        <ol class="prio">${prios}</ol>
+        <div class="stat-row"><span>trunk</span><b data-ref="trunk"></b></div>
+        <div class="stat-row"><span>branches</span><b data-ref="branches"></b></div>
+        <div class="stat-row"><span>open needle slots</span><b data-ref="slots"></b></div>
+      </details>
+      <details data-ref="secEnergy">
+        <summary>energy detail</summary>
+        <div class="stat-row"><span>needle income</span><b data-ref="leafIncome"></b></div>
+        <div class="stat-row"><span>heartseed trickle</span><b data-ref="heartIncome"></b></div>
+        <div class="stat-row"><span>upkeep: stems</span><b data-ref="upStems"></b></div>
+        <div class="stat-row"><span>upkeep: needles</span><b data-ref="upLeaves"></b></div>
+        <div class="stat-row"><span>upkeep: heart + roots</span><b data-ref="upCore"></b></div>
+        <div class="stat-row"><span>parts / age</span><b data-ref="parts"></b></div>
+      </details>`;
+    this.refs = {};
+    this.el.querySelectorAll<HTMLElement>('[data-ref]').forEach((n) => {
+      this.refs[n.dataset.ref!] = n;
+    });
+    this.builtFor = plant.id;
+  }
+
+  private refresh(plant: Plant): void {
+    const f = FACTIONS[plant.faction];
+    const r = this.refs;
+    const s = plantStatus(plant);
+    const net = plant.lastIncome - plant.lastUpkeep;
+
+    // aim line: warning trumps intent
+    const aimEl = r.aim;
+    if (s.warning) {
+      aimEl.textContent = `⚠ ${s.warning}`;
+      aimEl.classList.add('warn');
+    } else {
+      aimEl.textContent = `▸ ${s.aim}`;
+      aimEl.classList.remove('warn');
+    }
+
+    const pct = Math.round((plant.energy / plant.capacity) * 100);
+    r.energy.textContent = `${plant.energy.toFixed(1)} / ${plant.capacity} (${pct}%)`;
+    r.bar.style.width = `${pct}%`;
+    r.net.textContent = `${net >= 0 ? '+' : ''}${net.toFixed(2)}/s (${plant.lastIncome.toFixed(2)} in, ${plant.lastUpkeep.toFixed(2)} up)`;
+    r.net.style.color = net >= 0 ? '#7fe8b0' : '#f28a7a';
+    r.needles.textContent = `${plant.litLeaves} lit · ${plant.canopyLeaves} canopy · ${plant.shadowLeaves} shadow`;
+
+    // highlight the active priority
+    this.el.querySelectorAll<HTMLElement>('[data-prio]').forEach((li) => {
+      li.classList.toggle('active', li.dataset.prio === s.intent);
+    });
+    r.trunk.textContent = `${s.trunkSegs} / ${s.trunkTarget} segments`;
+    r.branches.textContent = `${s.budsActive} growing · ${s.budsDone} finished`;
+    r.slots.textContent = String(s.needleSlotsOpen);
+
+    // energy detail
+    const count = (k: string): number => plant.parts.filter((p) => p.kind === k).length;
+    const stems = count('stem');
+    const roots = count('root');
+    r.leafIncome.textContent = `+${(plant.lastIncome - f.energy.heartIncome).toFixed(2)}/s`;
+    r.heartIncome.textContent = `+${f.energy.heartIncome.toFixed(2)}/s`;
+    r.upStems.textContent = `−${(stems * f.energy.upkeep.stem).toFixed(2)}/s (${stems})`;
+    r.upLeaves.textContent = `−${(plant.totalLeaves * f.energy.upkeep.leaf).toFixed(2)}/s (${plant.totalLeaves})`;
+    r.upCore.textContent = `−${(f.energy.upkeep.heart + roots * f.energy.upkeep.root).toFixed(2)}/s`;
+    const t = Math.floor(plant.age);
+    r.parts.textContent = `${plant.parts.length} / ${Math.floor(t / 60)}m ${t % 60}s`;
+  }
 }

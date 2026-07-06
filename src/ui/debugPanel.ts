@@ -31,7 +31,7 @@ export class DebugPanel {
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML = `
-      <div class="panel-head">PLUNTZ dev — M2</div>
+      <div class="panel-head">PLUNTZ dev — M2.1</div>
       <div class="panel-body">
         <div class="stats"></div>
         <div class="btn-row speed"></div>

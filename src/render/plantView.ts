@@ -72,8 +72,14 @@ function drawPlant(g: Graphics, plant: Plant): void {
       }
       case 'leaf': {
         // needle fan: three blades around the leaf direction
-        const color = starving ? c.leafStarving : p.lit ? c.leaf : c.leafShaded;
-        const alpha = p.lit ? 0.95 : 0.55;
+        const color = starving
+          ? c.leafStarving
+          : p.shade === 0
+            ? c.leaf
+            : p.shade === 1
+              ? c.leafCanopy
+              : c.leafShaded;
+        const alpha = p.shade === 0 ? 0.95 : p.shade === 1 ? 0.7 : 0.5;
         for (const spread of [-0.38, 0, 0.38]) {
           const d = rot(p.dir, spread);
           const tip = add(p.base, scale(d, p.len * (spread === 0 ? 1 : 0.8)));

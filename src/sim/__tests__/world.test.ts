@@ -63,6 +63,17 @@ describe('world simulation', () => {
     expect(plant.energy).toBeLessThan(energyBefore);
   });
 
+  it('a grown tree self-shades: some needles sit under its own canopy', () => {
+    const w = createWorld(DEV01, 7);
+    for (let i = 0; i < 3000; i++) stepWorld(w, TUNING.simDt);
+    const plant = w.plants[0];
+    expect(plant.canopyLeaves).toBeGreaterThan(0); // interior needles half-earn
+    // the sun-side rim stays bright: a healthy spire keeps a solid lit fraction
+    expect(plant.litLeaves).toBeGreaterThan(plant.totalLeaves * 0.25);
+    // and self-shading must not flip the colony into deficit on open ground
+    expect(plant.lastIncome).toBeGreaterThan(plant.lastUpkeep);
+  });
+
   it('day cycle moves the sun', () => {
     const w = createWorld(DEV01, 7);
     w.sun.cycle = true;

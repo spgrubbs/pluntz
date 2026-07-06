@@ -166,7 +166,11 @@ the player shapes *what the colony tends to grow*, not each placement.
 
 ### Damage & competition (no gunfire — this is botany noir)
 
-- **Shading:** the passive kill. Shaded parts starve slowly. Most deaths are shade deaths.
+- **Shading:** the passive kill, in two tiers. **Canopy shade** (any foliage in the way —
+  a rival's or your own) halves a leaf's income, so overgrowing an enemy works but bushy
+  architecture taxes itself; needles on the same branch never shade each other (foliage
+  arranges itself in a plane). **Hard rock shadow** is near-total. Shaded parts starve
+  slowly; most deaths are shade deaths.
 - **Overgrowth:** growing into/around a rival crushes or strangles at contact points
   (slow, mesmerizing, and readable — vines visibly wrap).
 - **Chemical:** toxin auras, acid drips from parasites, spore infections — DoT fields

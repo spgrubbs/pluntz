@@ -1,5 +1,8 @@
 import type { FactionId } from '../sim/types';
 
+/** The growth-policy stages a plant can be in — mirrors tryGrow's priorities. */
+export type IntentId = 'anchor' | 'needles' | 'trunk' | 'branches' | 'mature';
+
 export interface FactionDef {
   id: FactionId;
   name: string;
@@ -7,11 +10,17 @@ export interface FactionDef {
     stem: number;
     stemOld: number;
     leaf: number;
-    leafShaded: number;
+    leafCanopy: number; // under foliage shade (half income)
+    leafShaded: number; // in hard rock shadow
     leafStarving: number;
     root: number;
     heart: number;
     heartCore: number;
+  };
+  /** Static text shown in the inspector's expandable behavior section. */
+  behavior: {
+    summary: string;
+    priorities: { id: IntentId; text: string }[];
   };
   energy: {
     heartInitial: number;
@@ -21,7 +30,8 @@ export interface FactionDef {
     heartIncome: number; // baseline trickle so a colony can't hard-stall at zero
     leafIncome: number; // energy/sec per fully lit, well-angled leaf
     minAngleEff: number; // efficiency floor vs. bad sun angle
-    shadeFloor: number; // income multiplier when occluded (evergreen floor)
+    canopyShade: number; // income multiplier under foliage (own or rival)
+    shadeFloor: number; // income multiplier in hard rock shadow (evergreen floor)
     upkeep: { heart: number; root: number; stem: number; leaf: number };
   };
   growth: {
@@ -59,11 +69,26 @@ export const PINOPHYTA: FactionDef = {
     stem: 0x5d8a5f,
     stemOld: 0x47624a,
     leaf: 0x3ee89c,
+    leafCanopy: 0x2aa877,
     leafShaded: 0x1d7a56,
     leafStarving: 0xd8c34a,
     root: 0x8a6d4f,
     heart: 0x2fbf7f,
     heartCore: 0xffd257,
+  },
+  behavior: {
+    summary:
+      'A patient vertical spire. Pinophyta outgrow shade rather than flee it: ' +
+      'needles keep a trickle of income even in darkness, and the trunk climbs ' +
+      'steadily sunward. Needles under other foliage (even their own) earn half ' +
+      'income — the conical silhouette exists to minimize self-shading.',
+    priorities: [
+      { id: 'anchor', text: 'Anchor: drive roots into the rock' },
+      { id: 'needles', text: 'Needle every open slot — income before architecture' },
+      { id: 'trunk', text: 'Raise the trunk, leaning toward the sun' },
+      { id: 'branches', text: 'Extend side branches, longest near the base' },
+      { id: 'mature', text: 'Mature: store energy (cones arrive in M4)' },
+    ],
   },
   energy: {
     heartInitial: 45,
@@ -73,6 +98,7 @@ export const PINOPHYTA: FactionDef = {
     heartIncome: 0.2,
     leafIncome: 1.2,
     minAngleEff: 0.35,
+    canopyShade: 0.5,
     shadeFloor: 0.15,
     upkeep: { heart: 0.15, root: 0.05, stem: 0.06, leaf: 0.1 },
   },

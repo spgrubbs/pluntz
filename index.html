@@ -111,8 +111,46 @@
         border-radius: 10px;
         padding: 10px 14px;
         font-size: 12px;
-        min-width: 250px;
+        min-width: 265px;
+        max-width: min(360px, calc(100vw - 20px));
+        max-height: 55vh;
+        overflow-y: auto;
         display: none;
+      }
+      .aim {
+        color: #ffd257;
+        margin: 0 0 7px;
+      }
+      .aim.warn {
+        color: #f28a7a;
+      }
+      #inspector details {
+        margin-top: 7px;
+        border-top: 1px solid #223052;
+        padding-top: 7px;
+      }
+      #inspector summary {
+        cursor: pointer;
+        color: #7fa0d8;
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      .desc {
+        color: #8fa0bd;
+        margin: 7px 0;
+        line-height: 1.5;
+      }
+      ol.prio {
+        margin: 4px 0 8px;
+        padding-left: 18px;
+        color: #56637f;
+      }
+      ol.prio li {
+        margin: 3px 0;
+      }
+      ol.prio li.active {
+        color: #aef5cf;
       }
       #inspector.open {
         display: block;

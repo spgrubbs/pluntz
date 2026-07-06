@@ -4,6 +4,7 @@ import { makeRng } from './rng';
 import type { Asteroid, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
 import { createPlant, stepPlant } from './plant';
+import type { CanopySeg } from './light';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
   const rng = makeRng(seed);
@@ -60,7 +61,30 @@ export function stepWorld(world: World, dt: number): void {
   if (world.sun.cycle) {
     world.sun.angle = (world.sun.angle + world.sun.cycleRate * dt) % (Math.PI * 2);
   }
-  for (const plant of world.plants) stepPlant(world, plant, dt);
+  const canopy = collectCanopy(world);
+  for (const plant of world.plants) stepPlant(world, plant, dt, canopy);
+}
+
+/** World-space leaf segments from every plant — the canopy occluder set. */
+function collectCanopy(world: World): CanopySeg[] {
+  const segs: CanopySeg[] = [];
+  for (const plant of world.plants) {
+    const ast = world.asteroids.find((a) => a.id === plant.asteroidId);
+    if (!ast) continue;
+    for (const p of plant.parts) {
+      if (p.kind !== 'leaf') continue;
+      // occlude with the central 70% of the fan — needle tips are porous
+      segs.push({
+        ax: ast.pos.x + p.base.x + (p.tip.x - p.base.x) * 0.15,
+        ay: ast.pos.y + p.base.y + (p.tip.y - p.base.y) * 0.15,
+        bx: ast.pos.x + p.base.x + (p.tip.x - p.base.x) * 0.85,
+        by: ast.pos.y + p.base.y + (p.tip.y - p.base.y) * 0.85,
+        plantId: plant.id,
+        group: p.group,
+      });
+    }
+  }
+  return segs;
 }
 
 /** Order-stable integer hash of sim state, for determinism tests. */

@@ -1,0 +1,80 @@
+import type { Plant } from './types';
+import { FACTIONS, type IntentId } from '../content/factions';
+import { leafDeficit } from './plant';
+
+export interface PlantStatus {
+  intent: IntentId;
+  /** One-line answer to "what is this plant doing right now?" */
+  aim: string;
+  /** Non-null when the colony is in trouble. */
+  warning: string | null;
+  saving: boolean; // true when the current aim is stalled waiting for energy
+  trunkSegs: number;
+  trunkTarget: number;
+  budsActive: number;
+  budsDone: number;
+  needleSlotsOpen: number;
+}
+
+/**
+ * Derives the plant's current aim from the same state tryGrow() reads, in the
+ * same priority order — the inspector reports what the sim will actually do.
+ */
+export function plantStatus(plant: Plant): PlantStatus {
+  const f = FACTIONS[plant.faction];
+  const g = f.growth;
+  const spendable = plant.energy - f.energy.reserve;
+  const deficit = leafDeficit(plant, f);
+  const budsActive = plant.buds.filter((b) => b.steps < b.maxSteps).length;
+  const budsDone = plant.buds.length - budsActive;
+
+  let intent: IntentId;
+  let aim: string;
+  let cost: number;
+  if (plant.rootCount < g.rootMax) {
+    intent = 'anchor';
+    aim = `driving anchor roots into the rock (${plant.rootCount}/${g.rootMax})`;
+    cost = g.rootCost;
+  } else if (deficit > 0) {
+    intent = 'needles';
+    aim = `sprouting needles — ${deficit} open slot${deficit === 1 ? '' : 's'}`;
+    cost = g.leafCost;
+  } else if (plant.trunkSegs < g.trunkTarget) {
+    intent = 'trunk';
+    aim = `raising the trunk toward the sun (${plant.trunkSegs}/${g.trunkTarget})`;
+    cost = g.stemCost;
+  } else if (budsActive > 0) {
+    intent = 'branches';
+    aim = `extending ${budsActive} side branch${budsActive === 1 ? '' : 'es'}`;
+    cost = g.stemCost;
+  } else {
+    intent = 'mature';
+    aim = 'canopy complete — storing energy';
+    cost = 0;
+  }
+
+  const saving = cost > 0 && spendable < cost;
+  if (saving) aim += ` · saving energy (${Math.max(spendable, 0).toFixed(0)}/${cost})`;
+
+  const net = plant.lastIncome - plant.lastUpkeep;
+  let warning: string | null = null;
+  if (net < 0) {
+    const shadedOut = plant.totalLeaves > 0 && plant.litLeaves === 0;
+    warning =
+      plant.energy <= 0.5
+        ? `starving — growth stalled${shadedOut ? ' (no needle sees the sun)' : ''}`
+        : `upkeep exceeds income — drawing reserves${shadedOut ? ' (fully shaded)' : ''}`;
+  }
+
+  return {
+    intent,
+    aim,
+    warning,
+    saving,
+    trunkSegs: plant.trunkSegs,
+    trunkTarget: g.trunkTarget,
+    budsActive,
+    budsDone,
+    needleSlotsOpen: deficit,
+  };
+}

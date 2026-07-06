@@ -5,7 +5,8 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M2 — first autonomous Pinophyta plant growing under directional light.
+- **Status:** M2.1 — autonomous Pinophyta plant with two-tier shading (canopy vs. rock
+  shadow, including self-shading) and an explainer inspector.
 
 ## Development
 
@@ -25,8 +26,11 @@ npm run build    # typecheck + production bundle in dist/
 1. Open the build. Pan with one finger / mouse drag, pinch or scroll to zoom —
    starfield parallaxes, 60fps in the debug panel.
 2. Watch the Pinophyta seedling on the home rock grow roots, a spire trunk, branches,
-   and needle fans, leaning toward the sun. Tap it for the inspector (energy, income
-   vs. upkeep, needles lit). Use 4×/8× speed to skip ahead.
+   and needle fans, leaning toward the sun. Tap it for the inspector: a live "what am I
+   doing" aim line, plus expandable **behavior** (faction strategy with the active
+   priority highlighted, trunk/branch/needle progress) and **energy detail** sections.
+   Needles render in three states — bright (lit), mid (canopy-shaded, half income —
+   including the tree's own shade), dark (rock shadow). Use 4×/8× speed to skip ahead.
 3. Drag the **sun angle** slider or enable **day cycle** — shadows sweep across the map,
    needles on the dark side dim and income drops.
 4. Enable **move rocks**, drag a big asteroid between the sun and the plant — the colony

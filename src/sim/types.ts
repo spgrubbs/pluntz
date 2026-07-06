@@ -1,5 +1,6 @@
 import type { Vec2 } from './vec';
 import type { RNG } from './rng';
+import type { ShadeLevel } from './light';
 
 export type FactionId = 'pinophyta';
 
@@ -22,7 +23,13 @@ export interface Part {
   side: number; // -1 | 0 | 1, which side it sprouted on
   leafCount: number; // stems only
   age: number; // seconds of sim time
-  lit: boolean; // leaves only: last light query result
+  shade: ShadeLevel; // leaves only: last light query result
+  /**
+   * Occlusion group: needles never shade needles of the same group (a branch
+   * arranges its foliage in a plane). 0 = trunk group; branches use the part
+   * id of their first segment.
+   */
+  group: number;
 }
 
 /** A side-branch growth bud waiting for / undergoing extension. */
@@ -56,6 +63,8 @@ export interface Plant {
   lastIncome: number;
   lastUpkeep: number;
   litLeaves: number;
+  canopyLeaves: number; // shaded by foliage (own or rival) — half income
+  shadowLeaves: number; // in hard rock shadow — near-zero income
   totalLeaves: number;
 }
 

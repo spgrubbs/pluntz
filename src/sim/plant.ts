@@ -3,7 +3,7 @@ import { add, scale, norm, rot, dot, fromAngle, DEG } from './vec';
 import { makeRng } from './rng';
 import type { Asteroid, Part, Plant, World, FactionId } from './types';
 import { FACTIONS, type FactionDef } from '../content/factions';
-import { isLit, toSunVec } from './light';
+import { shadeAt, toSunVec, type CanopySeg } from './light';
 
 export function createPlant(
   world: World,
@@ -27,7 +27,8 @@ export function createPlant(
     side: 0,
     leafCount: 0,
     age: 0,
-    lit: true,
+    shade: 0,
+    group: 0,
   };
   return {
     id: world.nextId++,
@@ -50,11 +51,13 @@ export function createPlant(
     lastIncome: 0,
     lastUpkeep: 0,
     litLeaves: 0,
+    canopyLeaves: 0,
+    shadowLeaves: 0,
     totalLeaves: 0,
   };
 }
 
-export function stepPlant(world: World, plant: Plant, dt: number): void {
+export function stepPlant(world: World, plant: Plant, dt: number, canopy: CanopySeg[]): void {
   const f = FACTIONS[plant.faction];
   const asteroid = world.asteroids.find((a) => a.id === plant.asteroidId);
   if (!asteroid) return;
@@ -67,6 +70,8 @@ export function stepPlant(world: World, plant: Plant, dt: number): void {
   let income = 0;
   let upkeep = 0;
   let litLeaves = 0;
+  let canopyLeaves = 0;
+  let shadowLeaves = 0;
   let totalLeaves = 0;
   for (const p of plant.parts) {
     upkeep += f.energy.upkeep[p.kind];
@@ -74,18 +79,23 @@ export function stepPlant(world: World, plant: Plant, dt: number): void {
     if (p.kind !== 'leaf') continue;
     totalLeaves++;
     const mid = add(asteroid.pos, add(p.base, scale(p.dir, p.len * 0.5)));
-    const lit = isLit(mid, toSun, world.asteroids);
-    if (lit !== p.lit) {
-      p.lit = lit;
+    const shade = shadeAt(mid, toSun, world.asteroids, canopy, plant.id, p.group);
+    if (shade !== p.shade) {
+      p.shade = shade;
       plant.version++; // lighting changed -> leaf tint must re-render
     }
-    if (lit) litLeaves++;
+    if (shade === 0) litLeaves++;
+    else if (shade === 1) canopyLeaves++;
+    else shadowLeaves++;
+    const shadeMult = shade === 0 ? 1 : shade === 1 ? f.energy.canopyShade : f.energy.shadeFloor;
     const angleEff = Math.max(Math.abs(dot(p.dir, toSun)), f.energy.minAngleEff);
-    income += f.energy.leafIncome * angleEff * (lit ? 1 : f.energy.shadeFloor);
+    income += f.energy.leafIncome * angleEff * shadeMult;
   }
   plant.lastIncome = income;
   plant.lastUpkeep = upkeep;
   plant.litLeaves = litLeaves;
+  plant.canopyLeaves = canopyLeaves;
+  plant.shadowLeaves = shadowLeaves;
   plant.totalLeaves = totalLeaves;
   plant.capacity = f.energy.capBase + plant.parts.length * f.energy.capPerPart;
   plant.energy = Math.min(Math.max(plant.energy + (income - upkeep) * dt, 0), plant.capacity);
@@ -131,12 +141,12 @@ function tryGrow(plant: Plant, f: FactionDef, toSun: Vec2): boolean {
   return false;
 }
 
-function maxLeavesFor(part: Part, f: FactionDef): number {
+export function maxLeavesFor(part: Part, f: FactionDef): number {
   if (part.kind !== 'stem') return 0;
   return part.onBranch ? f.growth.leavesPerBranchStem : f.growth.leavesPerTrunkStem;
 }
 
-function leafDeficit(plant: Plant, f: FactionDef): number {
+export function leafDeficit(plant: Plant, f: FactionDef): number {
   let d = 0;
   for (const p of plant.parts) d += Math.max(0, maxLeavesFor(p, f) - p.leafCount);
   return d;
@@ -165,7 +175,8 @@ function addRoot(plant: Plant, f: FactionDef): void {
     side,
     leafCount: 0,
     age: 0,
-    lit: false,
+    shade: 0,
+    group: 0,
   });
   plant.rootCount++;
   plant.energy -= g.rootCost;
@@ -197,7 +208,8 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2): void {
     side: 0,
     leafCount: 0,
     age: 0,
-    lit: false,
+    shade: 0,
+    group: 0,
   });
   plant.trunkTip = part.id;
   plant.trunkSegs = depth;
@@ -241,8 +253,11 @@ function extendBranch(plant: Plant, f: FactionDef): boolean {
     side: bud.side,
     leafCount: 0,
     age: 0,
-    lit: false,
+    shade: 0,
+    group: 0,
   });
+  // occlusion group: a branch's first segment names the group for the whole branch
+  part.group = bud.lastPart === -1 ? part.id : from.group;
   bud.lastPart = part.id;
   bud.steps++;
   plant.energy -= g.stemCost;
@@ -272,7 +287,8 @@ function addLeaf(plant: Plant, f: FactionDef): boolean {
       side,
       leafCount: 0,
       age: 0,
-      lit: true,
+      shade: 0,
+      group: stem.group, // needles share their branch's occlusion group
     });
     stem.leafCount++;
     plant.energy -= g.leafCost;
