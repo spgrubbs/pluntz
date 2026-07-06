@@ -1,0 +1,383 @@
+# PLUNTZ — Game Design Document
+
+**Version 0.1 — Living document.** This GDD instructs iterative development. Every milestone
+ends in a build that is deployable to Vercel and testable by hand. Nothing in this document
+is real biology; factions are videogame fantasy loosely themed on plant clades, the way
+RTS races are themed on insects or machines.
+
+---
+
+## 1. Vision
+
+You are a small, vulnerable sapling in a large dynamic void. Through luck and audacity you
+spread a plant empire across scattered asteroids until you overgrow the competition.
+
+**One-line pitch:** A light-touch colony sim / territorial arcade garden — *Reassembly*'s
+geometric, faction-colored aesthetic, but instead of piloting a ship you shepherd a mostly
+autonomous colony of space plants competing for sunlight.
+
+### Design pillars
+
+1. **The garden grows itself.** Plants are autonomous. The player nudges, they don't drive.
+   If the player puts the phone down for 60 seconds, the colony should still be doing
+   something interesting (and possibly dying).
+2. **Sunlight is real estate.** Light is directional. Position, height, and shade are the
+   core competition. Every faction relates to light differently (including ignoring it).
+3. **Readable geometry.** Every part's silhouette communicates its function at a glance.
+   Faction identity comes from color + shape language, not detail.
+4. **Small rounds, big feelings.** A round is 10–30 minutes and has a dramatic arc:
+   fragile start → first foothold → contested middle → overgrowth or extinction.
+5. **Indirect power.** Player tools cost energy the colony could have used to grow. Every
+   intervention is a trade against autonomy.
+
+---
+
+## 2. Platform & Technical Direction
+
+### Targets
+
+- **Primary deployment:** Android (Google Play), portrait *and* landscape, touch-first.
+- **Development/testing:** Web build deployed to Vercel after every iteration. The web
+  build is the daily test harness; Android is wrapped from the same code.
+
+### Stack (decided — do not relitigate per-milestone)
+
+| Layer | Choice | Why |
+|---|---|---|
+| Language | TypeScript | Safety across many iterations with an AI pair |
+| Build | Vite | Instant dev server, trivial Vercel deploys |
+| Rendering | PixiJS (WebGL, Canvas fallback) | Thousands of simple geometric sprites at 60fps on mid Android |
+| Android wrapper | Capacitor | Wraps the exact web build; adds native APIs (haptics, save files) later |
+| Sim architecture | Fixed-timestep deterministic simulation, decoupled from render | Replays, debugging, consistent behavior across frame rates |
+| State | Plain TS module store (no framework) for sim; minimal DOM/Pixi UI | Keep the sim portable and testable headless |
+| Tests | Vitest for sim logic (headless — no renderer needed) | The sim must be verifiable without eyeballs |
+
+### Performance budget (mid-range Android, ~2021 phone)
+
+- 60 fps target, 30 fps floor during spore storms.
+- ≤ ~3,000 live plant nodes on screen; sim tick 10 Hz (interpolated render), heavy
+  systems (shade recompute, AI planning) staggered across ticks.
+- Zero per-frame allocations in the sim hot loop (object pools).
+
+### Project conventions
+
+- `src/sim/` — pure simulation, **no Pixi imports, no DOM**. Runs headless in tests.
+- `src/render/` — Pixi scene that reads sim state. Never mutates sim.
+- `src/ui/` — HUD, menus, touch input → intents fed into sim.
+- `src/content/` — data-driven definitions: parts, factions, maps, as JSON/TS data.
+- All tuning constants in `src/content/tuning.ts`, never inline magic numbers.
+
+---
+
+## 3. Core Fantasy & Round Structure
+
+### The round (10–30 min)
+
+1. **Seedfall (0–2 min).** Your single seed drifts in; you choose (or are given) an
+   anchor asteroid. You sprout. You are tiny and the map is huge and indifferent.
+2. **Rooting (2–8 min).** Grow your first canopy, survive early hazards (debris, a rival's
+   scout spores, a shadow passing over). Earn your first Essence and buy your first trait.
+3. **Contest (8–20 min).** Colonies collide at the borders: shading wars, spore raids,
+   strangler vines, fauna lured back and forth. Points of interest get claimed.
+4. **Overgrowth (endgame).** One colony hits the win condition or the round timer forces
+   sudden-death (sunlight slowly dims everywhere; last photosynthesizing colony wins —
+   parasites/fungals get an inverted sudden-death, see §7).
+
+### Win conditions (map-configurable; campaign varies them)
+
+- **Domination:** eliminate all rival colonies (kill every *heart*, see §5).
+- **Canopy:** control X% of total lit surface for Y continuous seconds.
+- **Bloom:** be first to complete a *Great Bloom* (expensive terminal reproductive
+  structure — a victory monument you must grow and defend while it charges).
+
+### Loss
+
+Your colony dies when your last **Heartseed** (see §5) is destroyed. Defeat should feel
+like a storm that was survivable in hindsight — always show a one-line epitaph
+("Shaded out by the Gloomcaps, minute 14").
+
+---
+
+## 4. The World
+
+A 2D top-down void, one screen-to-several-screens across (maps have fixed bounds), scattered with:
+
+- **Asteroids** — anchorable rock. The fundamental land. Sizes from pebble (1 plant) to
+  massive (whole colony). Some rotate slowly, dragging their gardens through light and shadow.
+- **Rich rock** — mineral-veined asteroids; roots there extract bonus **Minerals** (§5).
+- **Derelicts / husks** — dead megaflora and wrecked structures. Decomposer factions eat
+  them; others can only anchor on them as scaffolding.
+- **Ice pockets** — meltable water reserves; contested utility resource in later content.
+- **Drift debris** — slow ambient rocks that damage what they hit (shatterable by grown
+  defenses). The main "weather."
+- **Fauna** (neutral critters, geometric like everything else):
+  - **Pollywisps** — pollinator motes; visit flowers, enable cross-colony trait-stealing (later content).
+  - **Grazers** — nibble leaves; a pest to canopy factions, a weapon if lured to a rival.
+  - **Seedgulls** — eat fruit, then drop your seeds far away. The long-range expansion vector.
+
+### Sunlight
+
+- Each map has 1+ **suns** at map edge or as free bodies. Light is **directional and
+  parallel** per sun (like Reassembly's clean vector look — long soft rays across the map).
+- Opaque objects (asteroids, plants) cast **hard shadows** — shade is the core territorial
+  mechanic. A leaf in shade earns nothing; a leaf shading a rival's leaf is a weapon.
+- Maps may feature a **slow day cycle** (sun orbits map over ~5 min), so prime real estate
+  migrates and no position is safe forever. Campaign map 1 uses a fixed sun for learnability.
+
+---
+
+## 5. The Plant Model (the heart of the sim)
+
+Plants are **node-graphs of parts**, grown organically over time — not player-assembled
+like Reassembly ships. The part-picker DNA of Reassembly instead lives in **traits** (§6):
+the player shapes *what the colony tends to grow*, not each placement.
+
+### Parts (universal vocabulary; factions reskin and remix)
+
+| Part | Geometry language | Function |
+|---|---|---|
+| **Heartseed** | Fat circle w/ inner core | Colony life. Stores energy. Losing all = defeat. New ones are expensive. |
+| **Root / Holdfast** | Angular taproot wedges into rock | Anchors plant to asteroid; extracts Minerals from rich rock |
+| **Stem** | Segmented strut | Structure; raises parts toward light; has HP, can be severed |
+| **Leaf / Frond** | Flat quad/triangle fans | Photosynthesis: energy ∝ lit area × angle to sun |
+| **Storage bulb** | Swollen node | Energy battery; smooths day cycles and sieges |
+| **Reproductive structure** | Varies wildly per faction (§7) | Makes new plants: launched seeds, spore clouds, runners, fruit |
+| **Defense** | Spikes, bark plating, stinger polyps | Blocks grazers, damages encroaching rival growth |
+| **Special** | Per-faction | Faction mechanics live here |
+
+### Growth (autonomous)
+
+- Each plant runs a simple behavior policy: allocate incoming energy between
+  *maintenance → growth → storage → reproduction*, with weights set by faction defaults
+  and player-purchased traits.
+- Growth is **phototropic**: new stems bias toward light and away from occlusion, with
+  faction-flavored branching patterns (conifer spire vs. sprawling vine vs. creeping mat).
+  This is where visual identity emerges *for free* from mechanics.
+- Plants age. Old growth hardens (more HP, less efficient). Dead plants become husk
+  material — food for decomposers, scaffolding for epiphytes.
+
+### Resources
+
+| Resource | Source | Used for |
+|---|---|---|
+| **Energy** (per-plant, flows colony-wide slowly) | Light on leaves; decomposition; parasitism | Growth, reproduction, defenses, player abilities |
+| **Minerals** (colony pool) | Roots in rich rock; recycled husks | Hard parts: bark, spikes, Heartseeds, Great Bloom |
+| **Essence** (colony pool, the "meta" currency) | Milestones: first bloom, kills, surviving hazards, round timeline | Traits (§6) and the strongest player interventions |
+
+### Damage & competition (no gunfire — this is botany noir)
+
+- **Shading:** the passive kill. Shaded parts starve slowly. Most deaths are shade deaths.
+- **Overgrowth:** growing into/around a rival crushes or strangles at contact points
+  (slow, mesmerizing, and readable — vines visibly wrap).
+- **Chemical:** toxin auras, acid drips from parasites, spore infections — DoT fields
+  rendered as tinted particle hazes.
+- **Physical:** drift debris impacts, launched hardened seeds (a *seed* can be a slow
+  cannonball), grazer bites.
+
+---
+
+## 6. The Player's Hands (light touch by design)
+
+The player never places parts directly. All tools are **indirect**, cost resources, and
+have visible cooldowns. Proposed toolset — build in this order, keep each one testable solo:
+
+### Tier 1 — attention (free, always available)
+
+- **Pan/pinch camera**; tap any plant/part for an inspector card.
+- **Ping:** tap-hold a location to bias the colony's *interest* — nearby plants weight
+  growth and reproduction toward the ping. Free but one active ping only. This is the
+  bread-and-butter "shepherd's crook" verb.
+
+### Tier 2 — cultivation (Energy costs)
+
+- **Bless:** tap a plant → temporary growth surge (visual: bright pulse up its stems).
+- **Prune:** swipe across your own stems to cut them. Refunds some energy; used to redirect
+  growth, drop shaded dead weight, or amputate infections.
+- **Aim reproduction:** when a launcher-type reproductive structure is charged, the player
+  may drag from it to aim the shot (otherwise it auto-fires sensibly). *The* moment of
+  audacity: firing a seed across the void at a distant sunlit rock.
+
+### Tier 3 — evolution (Essence costs; the strategic layer)
+
+- **Traits:** a compact per-round mutation tree (~12–18 nodes/faction, pick ~5–7 per
+  round). Examples: *Broadleaf* (+leaf area, +grazer appeal), *Ironbark*, *Volatile Seeds*
+  (seeds explode on landing, clearing a landing zone), *Deep Taproots*, *Sweet Nectar*
+  (pollywisps prioritize you). Traits apply colony-wide to future growth — old growth keeps
+  old traits, so colonies visibly show their history in rings of style.
+- **Instincts:** sliders/toggles for the autonomous policy — Expand ↔ Fortify,
+  Spread thin ↔ Grow tall. Two sliders max; this must not become a spreadsheet.
+
+### Tier 4 — rare dramatic acts (Essence, once-or-twice a round)
+
+- **Lure:** drop a scent at a location — pulls fauna (send grazers at a rival; call a
+  seedgull to your fruit).
+- **Martyr Bloom:** sacrifice a mature plant to instantly fire *all* its stored energy as
+  reproduction (panic button / all-in expansion).
+- **Great Bloom:** the victory monument (see §3).
+
+Everything above is a suggestion set to iterate on in playtests; Ping + Prune + Aim
+reproduction + Traits are the load-bearing four and get built first.
+
+---
+
+## 7. Factions (launch three; roster grows later)
+
+Faction = color + shape language + growth pattern + reproduction style + 1–2 rule-breaking
+mechanics + trait tree flavor. All names are fantasy; clade inspiration is thematic only.
+
+### 7.1 THE VERDANT SPIRE — “conifer/gymnosperm” theme
+- **Color/shape:** deep greens/teals; tall triangular spires, radial needle fans, armored
+  cone geometry. Vertical, symmetric, cathedral-like.
+- **Playstyle:** the tall, tough, patient baseline faction. Best tutorial faction.
+- **Growth:** strongly vertical — outgrow the shade rather than flee it. Old growth gains
+  bark armor automatically.
+- **Reproduction:** **cone launchers** — ballistic hardened seeds, longest natural range,
+  player-aimable. Seeds survive harsh landing spots.
+- **Rule-breakers:** needles are low-value food (grazers mostly ignore them); tolerates
+  partial shade better than anyone (evergreen efficiency floor).
+- **Weakness:** slow everything; loses a fair race for open ground.
+
+### 7.2 THE EFFLORESCENCE — “flowering plant” theme
+- **Color/shape:** hot magentas/corals/golds on green; asymmetric sprawl, big showy
+  radial flowers, round fruit. Curvy, exuberant, a little vulgar.
+- **Playstyle:** fast, greedy, diplomatic-with-wildlife tempo faction.
+- **Growth:** rapid sprawling vines; can grow *along* surfaces and (with trait) over rival
+  husks as an epiphyte-lite.
+- **Reproduction:** **flowers + fruit + fauna.** Pollywisps boost seed quality; fruit lures
+  seedgulls who deliver seeds map-distances away — unmatched reach but RNG-flavored (you
+  influence, not command, the gulls… unless you spend on Lure).
+- **Rule-breakers:** wildlife synergy (fauna actively serve you); nectar can *bribe*
+  grazers away from your leaves.
+- **Weakness:** delicious and flammable-fragile; poor in low light; fauna can be stolen.
+
+### 7.3 THE GLOOMCAP COMPACT — “fungal” theme (the anti-sun faction)
+- **Color/shape:** bruise purples/bone whites, bioluminescent dots; domes, gills, creeping
+  root-web filaments rendered as faint lace across rock surfaces.
+- **Playstyle:** ignores the entire sunlight game — feeds on death. Terrifying midgame.
+- **Growth:** surface web (a creeping territorial stain across asteroids) + fruiting domes
+  at web nodes. The web is near-invisible until it fruits — scouting them is a mechanic.
+- **Energy:** **decomposition** — consumes husks, dead plants, drift debris; slow trickle
+  from bare rock. Every kill anywhere on the map is Gloomcap food. Long games favor them.
+- **Reproduction:** **spore bursts** — short-range area clouds; any spore landing on web,
+  husk, or shaded rock takes hold. Shade, everyone else's poison, is their garden.
+- **Rule-breakers:** immune to shading; **infection** — spores landing on living rivals
+  seed a parasitic drain (counterable by Prune — a direct player-verb interaction);
+  inverted sudden-death (in the endgame dimming, they *accelerate*).
+- **Weakness:** hopeless at long range; slow on clean, husk-free maps; fruiting domes are
+  soft and their only vital organs (web without domes starves).
+
+### Future roster (design later, name now for the campaign's world-building)
+Fern-themed spore artillery (Pterid Choir); moss swarm that terraforms bare rock for
+everyone (Bryotic Tide); lichen symbiote that must fuse with another colony (The Accord);
+succulent siege-battery hoarders; carnivorous fauna-eaters; strangler-vine parasite that
+wins *inside* a host colony.
+
+**AI colonies** use the same faction kits with the same rules, driven by simple utility
+policies (expand toward best unclaimed light / respond to threats / spend essence on a
+scripted trait order per difficulty). No cheating on resources at normal difficulty.
+
+---
+
+## 8. Metagame
+
+- **Campaign: 10 authored maps**, one new mechanic or faction matchup introduced per map,
+  escalating from "fixed sun, one passive rival" to "twin orbiting suns, three rivals,
+  debris storms." Campaign maps are hand-placed JSON — same format the generator emits.
+- **Skirmish: seeded random maps** — pick faction, rivals, map size, sun behavior.
+  Seed shown/shareable (deterministic sim makes seeds reproducible bug reports too).
+- **Progression:** cosmetic + roster only (unlock factions/maps). No power meta-progression
+  — every round is winnable on skill from round one.
+
+---
+
+## 9. Art Direction & Asset Pipeline
+
+### Direction
+
+- Reassembly-inspired: flat-shaded simple geometry, glowing accents on dark void,
+  faction-saturated colors, additive bloom on lights/spores. Function must be readable
+  from silhouette alone at phone-screen sizes.
+- Background: near-black blue/purple gradient, faint parallax starfield, god-rays from suns.
+
+### Placeholder → handmade handoff (important for this project's workflow)
+
+1. **Every drawable is registered in a single manifest** (`src/content/art-manifest.ts`):
+   id, expected size, anchor point, tint behavior (faction-colorable or fixed).
+2. Placeholders are **procedurally drawn Pixi Graphics** (polygons/circles) generated from
+   the manifest — no binary placeholder files cluttering the repo.
+3. When you hand-make an asset, you drop a PNG/SVG into `public/art/<id>.png` — the loader
+   checks the manifest, prefers your file over the procedural placeholder, no code change.
+4. Faction coloring is done by tinting grayscale/white art, so one handmade asset serves
+   all factions unless flagged `fixedColor`.
+5. A hidden `/gallery` debug route renders every manifest entry (placeholder or replaced)
+   on one screen for review on-device.
+
+### Audio (later milestone, same pattern)
+Ambient drone + generative plinks on growth events; audio manifest mirrors art manifest.
+
+---
+
+## 10. UX & Mobile
+
+- **Touch-first:** all verbs are tap, tap-hold, drag, swipe, pinch. No hover, ever.
+  Web build maps mouse to the same gestures for Vercel testing.
+- **One-hand portrait play** is the golden path; landscape supported.
+- **HUD:** minimal — resource strip (Energy/Minerals/Essence), pause/speed (1×/2×/4×),
+  trait button with badge when affordable, inspector card on tap. Everything else earns
+  its place or dies.
+- **Sim speed controls** are also the developer's testing tool from milestone 1.
+- **Interruptibility:** app pause/resume must be lossless (Android lifecycle);
+  auto-save every 10 s of sim time.
+- **Color-blindness:** faction shape-language must carry identity without color; add
+  pattern overlays option later.
+
+---
+
+## 11. Development Plan — Milestones
+
+**Rules of the road:**
+- Each milestone ends with: pushed to git → deployed on Vercel → a written 3-line test
+  script in the PR/commit description ("open build, do X, expect Y").
+- Sim logic lands with Vitest coverage where it's cheap (energy math, shade math,
+  determinism check: same seed → same state hash after 1,000 ticks).
+- A debug panel (FPS, tick time, entity counts, god-tools like "grant essence",
+  "spawn debris") ships in milestone 1 and never gets removed, only hidden behind
+  a triple-tap on the version number.
+
+| # | Milestone | What's playable / testable on Vercel |
+|---|---|---|
+| **M0** | Scaffold: Vite+TS+Pixi, fixed-timestep loop, camera pan/pinch/zoom, starfield, debug panel. Vercel deploy pipeline live. | Pan around a starfield at 60fps on your phone browser. |
+| **M1** | World: asteroids from a map JSON, one sun, **directional light + hard shadows** rendered as lit/shaded surface shading. | See shadows sweep as you toggle the debug day-cycle. |
+| **M2** | First life: one hand-authored Verdant plant grows autonomously — roots, stems, leaves, phototropism, energy income visible in inspector. | Watch a plant grow toward light; shade it (debug: drag asteroid) and watch it struggle. |
+| **M3** | Life & death: HP, aging, starvation, debris impacts, husks. Prune verb. | Prune your plant; ram it with debug debris; watch it die and leave a husk. |
+| **M4** | Reproduction: cone launchers, aimed + auto seed shots, seed landing/sprouting. Ping verb. Colony = multiple plants, shared pools. | Spread from one rock to three. Feel the "audacious shot across the void." |
+| **M5** | Competition: second Verdant colony w/ basic AI, shading warfare, overgrowth contact damage, win/lose (Domination) + round timer + epitaph. **First real round of Pluntz.** | Beat a dumb AI. Lose to it on purpose. 10-min round arc exists. |
+| **M6** | Strategy layer: Essence, trait tree (Verdant, ~12 nodes), Bless, instinct sliders, Canopy win condition. | Full Verdant-vs-Verdant round with meaningful choices. Balance pass #1. |
+| **M7** | Faction 2: Efflorescence + fauna (pollywisps, seedgulls, grazers) + Lure. | Asymmetric matchup. Fauna visibly alive. |
+| **M8** | Faction 3: Gloomcap — decomposition, web, spores, infection, inverted sudden-death. | All three matchups playable; rock-paper-scissors texture check. |
+| **M9** | Meta shell: menus, faction select, skirmish generator w/ seeds, campaign maps 1–3, save/resume, settings. | The game has a front door. Strangers can be handed the link. |
+| **M10** | Android: Capacitor wrap, lifecycle/save hardening, haptics, performance pass on real device, Play internal testing track. | APK on your phone. |
+| **M11+** | Campaign 4–10, audio, art-swap support polish, more factions, juice pass (particles, screen-shake-free botanical drama). | Iterate with your handmade art via the manifest pipeline. |
+
+**Iteration protocol per session:** you playtest the latest Vercel deploy → give notes →
+we adjust `tuning.ts`/mechanics → new deploy. Tuning-only changes should never require
+touching sim architecture; if they do, that's an architecture bug.
+
+---
+
+## 12. Open Questions (decide via playtesting, not upfront)
+
+1. Does the player pick the first anchor asteroid, or does drama demand a random seedfall?
+   (Campaign: authored. Skirmish: probably pick from 3 candidates.)
+2. Day-cycle speed: is migrating sunlight delightful or anxiety-inducing on a phone? M1's
+   debug toggle exists to answer this early.
+3. Energy as colony-wide pool vs. per-plant with slow flow: start per-plant-with-flow
+   (more organic, more readable local death), fall back to pooled if it confuses.
+4. Should Prune work on *rivals* at high cost (herbicide fantasy) or stay self-only
+   (purity of indirect play)? Start self-only.
+5. Round length pressure: is the dimming sudden-death enough, or do we need escalating
+   debris storms as a timer? Test at M5.
+
+---
+
+*Next step after this document: M0 scaffold.*
