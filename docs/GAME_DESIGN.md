@@ -94,7 +94,7 @@ autonomous colony of space plants competing for sunlight.
 
 Your colony dies when your last **Heartseed** (see §5) is destroyed. Defeat should feel
 like a storm that was survivable in hindsight — always show a one-line epitaph
-("Shaded out by the Gloomcaps, minute 14").
+("Shaded out by the Basidiomycota, minute 14").
 
 ---
 
@@ -110,10 +110,10 @@ A 2D top-down void, one screen-to-several-screens across (maps have fixed bounds
 - **Ice pockets** — meltable water reserves; contested utility resource in later content.
 - **Drift debris** — slow ambient rocks that damage what they hit (shatterable by grown
   defenses). The main "weather."
-- **Fauna** (neutral critters, geometric like everything else):
-  - **Pollywisps** — pollinator motes; visit flowers, enable cross-colony trait-stealing (later content).
-  - **Grazers** — nibble leaves; a pest to canopy factions, a weapon if lured to a rival.
-  - **Seedgulls** — eat fruit, then drop your seeds far away. The long-range expansion vector.
+- **Fauna** (neutral critters, geometric like everything else; named with real ecological Latin):
+  - **Anthophila** — pollinator motes; visit flowers, enable cross-colony trait-stealing (later content).
+  - **Phytophaga** — grazers that nibble leaves; a pest to canopy factions, a weapon if lured to a rival.
+  - **Frugivora** — fruit-eaters that then drop your seeds far away. The long-range expansion vector.
 
 ### Sunlight
 
@@ -202,15 +202,15 @@ have visible cooldowns. Proposed toolset — build in this order, keep each one 
 - **Traits:** a compact per-round mutation tree (~12–18 nodes/faction, pick ~5–7 per
   round). Examples: *Broadleaf* (+leaf area, +grazer appeal), *Ironbark*, *Volatile Seeds*
   (seeds explode on landing, clearing a landing zone), *Deep Taproots*, *Sweet Nectar*
-  (pollywisps prioritize you). Traits apply colony-wide to future growth — old growth keeps
+  (Anthophila prioritize you). Traits apply colony-wide to future growth — old growth keeps
   old traits, so colonies visibly show their history in rings of style.
 - **Instincts:** sliders/toggles for the autonomous policy — Expand ↔ Fortify,
   Spread thin ↔ Grow tall. Two sliders max; this must not become a spreadsheet.
 
 ### Tier 4 — rare dramatic acts (Essence, once-or-twice a round)
 
-- **Lure:** drop a scent at a location — pulls fauna (send grazers at a rival; call a
-  seedgull to your fruit).
+- **Lure:** drop a scent at a location — pulls fauna (send Phytophaga at a rival; call a
+  Frugivora to your fruit).
 - **Martyr Bloom:** sacrifice a mature plant to instantly fire *all* its stored energy as
   reproduction (panic button / all-in expansion).
 - **Great Bloom:** the victory monument (see §3).
@@ -223,9 +223,10 @@ reproduction + Traits are the load-bearing four and get built first.
 ## 7. Factions (launch three; roster grows later)
 
 Faction = color + shape language + growth pattern + reproduction style + 1–2 rule-breaking
-mechanics + trait tree flavor. All names are fantasy; clade inspiration is thematic only.
+mechanics + trait tree flavor. Faction names are real clade names used as sci-fi flavor;
+the mechanics are pure videogame fantasy.
 
-### 7.1 THE VERDANT SPIRE — “conifer/gymnosperm” theme
+### 7.1 PINOPHYTA — conifer theme
 - **Color/shape:** deep greens/teals; tall triangular spires, radial needle fans, armored
   cone geometry. Vertical, symmetric, cathedral-like.
 - **Playstyle:** the tall, tough, patient baseline faction. Best tutorial faction.
@@ -233,24 +234,24 @@ mechanics + trait tree flavor. All names are fantasy; clade inspiration is thema
   bark armor automatically.
 - **Reproduction:** **cone launchers** — ballistic hardened seeds, longest natural range,
   player-aimable. Seeds survive harsh landing spots.
-- **Rule-breakers:** needles are low-value food (grazers mostly ignore them); tolerates
+- **Rule-breakers:** needles are low-value food (Phytophaga mostly ignore them); tolerates
   partial shade better than anyone (evergreen efficiency floor).
 - **Weakness:** slow everything; loses a fair race for open ground.
 
-### 7.2 THE EFFLORESCENCE — “flowering plant” theme
+### 7.2 ANTHOPHYTA — flowering-plant theme
 - **Color/shape:** hot magentas/corals/golds on green; asymmetric sprawl, big showy
   radial flowers, round fruit. Curvy, exuberant, a little vulgar.
 - **Playstyle:** fast, greedy, diplomatic-with-wildlife tempo faction.
 - **Growth:** rapid sprawling vines; can grow *along* surfaces and (with trait) over rival
   husks as an epiphyte-lite.
-- **Reproduction:** **flowers + fruit + fauna.** Pollywisps boost seed quality; fruit lures
-  seedgulls who deliver seeds map-distances away — unmatched reach but RNG-flavored (you
-  influence, not command, the gulls… unless you spend on Lure).
+- **Reproduction:** **flowers + fruit + fauna.** Anthophila boost seed quality; fruit lures
+  Frugivora who deliver seeds map-distances away — unmatched reach but RNG-flavored (you
+  influence, not command, the birds… unless you spend on Lure).
 - **Rule-breakers:** wildlife synergy (fauna actively serve you); nectar can *bribe*
-  grazers away from your leaves.
+  Phytophaga away from your leaves.
 - **Weakness:** delicious and flammable-fragile; poor in low light; fauna can be stolen.
 
-### 7.3 THE GLOOMCAP COMPACT — “fungal” theme (the anti-sun faction)
+### 7.3 BASIDIOMYCOTA — fungal theme (the anti-sun faction)
 - **Color/shape:** bruise purples/bone whites, bioluminescent dots; domes, gills, creeping
   root-web filaments rendered as faint lace across rock surfaces.
 - **Playstyle:** ignores the entire sunlight game — feeds on death. Terrifying midgame.
@@ -267,10 +268,11 @@ mechanics + trait tree flavor. All names are fantasy; clade inspiration is thema
   soft and their only vital organs (web without domes starves).
 
 ### Future roster (design later, name now for the campaign's world-building)
-Fern-themed spore artillery (Pterid Choir); moss swarm that terraforms bare rock for
-everyone (Bryotic Tide); lichen symbiote that must fuse with another colony (The Accord);
-succulent siege-battery hoarders; carnivorous fauna-eaters; strangler-vine parasite that
-wins *inside* a host colony.
+Fern-themed spore artillery (**Pteridophyta**); moss swarm that terraforms bare rock for
+everyone (**Bryophyta**); lichen symbiote that must fuse with another colony
+(**Lichenes**); succulent siege-battery hoarders (**Crassulaceae**); carnivorous
+fauna-eaters (**Droseraceae**); strangler parasite that wins *inside* a host colony
+(**Cuscuta**).
 
 **AI colonies** use the same faction kits with the same rules, driven by simple utility
 policies (expand toward best unclaimed light / respond to threats / spend essence on a
@@ -348,13 +350,13 @@ Ambient drone + generative plinks on growth events; audio manifest mirrors art m
 |---|---|---|
 | **M0** | Scaffold: Vite+TS+Pixi, fixed-timestep loop, camera pan/pinch/zoom, starfield, debug panel. Vercel deploy pipeline live. | Pan around a starfield at 60fps on your phone browser. |
 | **M1** | World: asteroids from a map JSON, one sun, **directional light + hard shadows** rendered as lit/shaded surface shading. | See shadows sweep as you toggle the debug day-cycle. |
-| **M2** | First life: one hand-authored Verdant plant grows autonomously — roots, stems, leaves, phototropism, energy income visible in inspector. | Watch a plant grow toward light; shade it (debug: drag asteroid) and watch it struggle. |
+| **M2** | First life: one hand-authored Pinophyta plant grows autonomously — roots, stems, leaves, phototropism, energy income visible in inspector. | Watch a plant grow toward light; shade it (debug: drag asteroid) and watch it struggle. |
 | **M3** | Life & death: HP, aging, starvation, debris impacts, husks. Prune verb. | Prune your plant; ram it with debug debris; watch it die and leave a husk. |
 | **M4** | Reproduction: cone launchers, aimed + auto seed shots, seed landing/sprouting. Ping verb. Colony = multiple plants, shared pools. | Spread from one rock to three. Feel the "audacious shot across the void." |
-| **M5** | Competition: second Verdant colony w/ basic AI, shading warfare, overgrowth contact damage, win/lose (Domination) + round timer + epitaph. **First real round of Pluntz.** | Beat a dumb AI. Lose to it on purpose. 10-min round arc exists. |
-| **M6** | Strategy layer: Essence, trait tree (Verdant, ~12 nodes), Bless, instinct sliders, Canopy win condition. | Full Verdant-vs-Verdant round with meaningful choices. Balance pass #1. |
-| **M7** | Faction 2: Efflorescence + fauna (pollywisps, seedgulls, grazers) + Lure. | Asymmetric matchup. Fauna visibly alive. |
-| **M8** | Faction 3: Gloomcap — decomposition, web, spores, infection, inverted sudden-death. | All three matchups playable; rock-paper-scissors texture check. |
+| **M5** | Competition: second Pinophyta colony w/ basic AI, shading warfare, overgrowth contact damage, win/lose (Domination) + round timer + epitaph. **First real round of Pluntz.** | Beat a dumb AI. Lose to it on purpose. 10-min round arc exists. |
+| **M6** | Strategy layer: Essence, trait tree (Pinophyta, ~12 nodes), Bless, instinct sliders, Canopy win condition. | Full Pinophyta-vs-Pinophyta round with meaningful choices. Balance pass #1. |
+| **M7** | Faction 2: Anthophyta + fauna (Anthophila, Frugivora, Phytophaga) + Lure. | Asymmetric matchup. Fauna visibly alive. |
+| **M8** | Faction 3: Basidiomycota — decomposition, web, spores, infection, inverted sudden-death. | All three matchups playable; rock-paper-scissors texture check. |
 | **M9** | Meta shell: menus, faction select, skirmish generator w/ seeds, campaign maps 1–3, save/resume, settings. | The game has a front door. Strangers can be handed the link. |
 | **M10** | Android: Capacitor wrap, lifecycle/save hardening, haptics, performance pass on real device, Play internal testing track. | APK on your phone. |
 | **M11+** | Campaign 4–10, audio, art-swap support polish, more factions, juice pass (particles, screen-shake-free botanical drama). | Iterate with your handmade art via the manifest pipeline. |

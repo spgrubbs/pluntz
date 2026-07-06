@@ -1,0 +1,128 @@
+import { Container, Graphics } from 'pixi.js';
+import type { World } from '../sim/types';
+import { toSunVec } from '../sim/light';
+import { dot, scale, add } from '../sim/vec';
+
+const SHADOW_ALPHA = 0.42;
+const ROCK_FILL = 0x3c4353;
+const ROCK_FILL_RICH = 0x4a4360;
+const ROCK_RIM_LIT = 0xd8e2f2;
+const ROCK_DARK = 0x0a0d18;
+
+/**
+ * Draws suns, parallel-light shadow volumes, and asteroids (lit rim +
+ * faceted dark side). Redrawn every frame — trivially cheap at map scale.
+ */
+export class WorldView {
+  readonly container = new Container();
+  private shadows = new Graphics();
+  private rocks = new Graphics();
+  private sun = new Graphics();
+  private rays = new Graphics();
+
+  constructor() {
+    this.container.addChild(this.rays, this.shadows, this.rocks, this.sun);
+    this.sun.blendMode = 'add';
+    this.rays.blendMode = 'add';
+  }
+
+  update(world: World): void {
+    const toSun = toSunVec(world.sun);
+    const diag = Math.hypot(world.width, world.height);
+    const shadowLen = diag * 1.5;
+
+    // --- Shadow volumes -----------------------------------------------------
+    const sh = this.shadows;
+    sh.clear();
+    for (const a of world.asteroids) {
+      const px = -toSun.y * a.radius;
+      const py = toSun.x * a.radius;
+      const ax = a.pos.x + px;
+      const ay = a.pos.y + py;
+      const bx = a.pos.x - px;
+      const by = a.pos.y - py;
+      sh.poly([
+        ax, ay,
+        bx, by,
+        bx - toSun.x * shadowLen, by - toSun.y * shadowLen,
+        ax - toSun.x * shadowLen, ay - toSun.y * shadowLen,
+      ]).fill({ color: 0x000000, alpha: SHADOW_ALPHA });
+    }
+
+    // --- Asteroids ------------------------------------------------------------
+    const g = this.rocks;
+    g.clear();
+    for (const a of world.asteroids) {
+      const world_pts: number[] = [];
+      for (const p of a.shape) world_pts.push(a.pos.x + p.x, a.pos.y + p.y);
+      g.poly(world_pts).fill({ color: a.rich ? ROCK_FILL_RICH : ROCK_FILL });
+
+      // faceted dark side: consecutive vertices facing away from the sun + center
+      const n = a.shape.length;
+      let darkPts: number[] | null = null;
+      for (let i = 0; i <= n; i++) {
+        const p = a.shape[i % n];
+        const facing = dot(p, toSun) / Math.hypot(p.x, p.y);
+        if (facing < 0.05) {
+          if (!darkPts) darkPts = [];
+          darkPts.push(a.pos.x + p.x, a.pos.y + p.y);
+        } else if (darkPts && darkPts.length >= 4) {
+          darkPts.push(a.pos.x, a.pos.y);
+          g.poly(darkPts).fill({ color: ROCK_DARK, alpha: 0.5 });
+          darkPts = null;
+        } else {
+          darkPts = null;
+        }
+      }
+      if (darkPts && darkPts.length >= 4) {
+        darkPts.push(a.pos.x, a.pos.y);
+        g.poly(darkPts).fill({ color: ROCK_DARK, alpha: 0.5 });
+      }
+
+      // lit rim segments
+      for (let i = 0; i < n; i++) {
+        const p0 = a.shape[i];
+        const p1 = a.shape[(i + 1) % n];
+        const mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+        const facing = dot(mid, toSun) / Math.hypot(mid.x, mid.y);
+        if (facing > 0.3) {
+          g.moveTo(a.pos.x + p0.x, a.pos.y + p0.y)
+            .lineTo(a.pos.x + p1.x, a.pos.y + p1.y)
+            .stroke({ width: 2.5, color: ROCK_RIM_LIT, alpha: 0.28 + facing * 0.45 });
+        }
+      }
+
+      if (a.rich) {
+        // mineral veins: sparkle dots
+        for (let i = 0; i < 5; i++) {
+          const p = a.shape[(i * 3) % n];
+          g.circle(a.pos.x + p.x * 0.55, a.pos.y + p.y * 0.55, 2.2).fill({
+            color: 0xc9a4ff,
+            alpha: 0.8,
+          });
+        }
+      }
+    }
+
+    // --- Sun disc + glow + faint parallel rays -------------------------------
+    const sunPos = scale(toSun, diag * 0.62);
+    const s = this.sun;
+    s.clear();
+    s.circle(sunPos.x, sunPos.y, 260).fill({ color: 0xfff2c9, alpha: 0.05 });
+    s.circle(sunPos.x, sunPos.y, 150).fill({ color: 0xfff2c9, alpha: 0.09 });
+    s.circle(sunPos.x, sunPos.y, 80).fill({ color: 0xfff6da, alpha: 0.35 });
+    s.circle(sunPos.x, sunPos.y, 52).fill({ color: 0xfffbef });
+
+    const r = this.rays;
+    r.clear();
+    const perp = { x: -toSun.y, y: toSun.x };
+    for (let i = -5; i <= 5; i++) {
+      const off = i * diag * 0.09;
+      const start = add(sunPos, scale(perp, off));
+      const end = add(start, scale(toSun, -diag * 1.35));
+      r.moveTo(start.x, start.y)
+        .lineTo(end.x, end.y)
+        .stroke({ width: 2, color: 0xfff2c9, alpha: 0.035 });
+    }
+  }
+}

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#05060f" />
+    <title>Pluntz</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #05060f;
+        font-family: 'Courier New', ui-monospace, monospace;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+      #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        color: #b8c4d8;
+      }
+      #ui > * {
+        pointer-events: auto;
+      }
+      .panel {
+        position: absolute;
+        top: max(8px, env(safe-area-inset-top));
+        left: 8px;
+        background: rgba(8, 12, 24, 0.82);
+        border: 1px solid #2a3550;
+        border-radius: 8px;
+        font-size: 12px;
+        min-width: 210px;
+        overflow: hidden;
+      }
+      .panel-head {
+        padding: 7px 10px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        color: #7fe8b0;
+        cursor: pointer;
+      }
+      .panel-body {
+        padding: 4px 10px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .panel-body.hidden {
+        display: none;
+      }
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: #8fa0bd;
+      }
+      .stat-row b {
+        color: #dce6f5;
+        font-weight: normal;
+      }
+      .btn-row {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      button {
+        font-family: inherit;
+        font-size: 12px;
+        background: #182238;
+        color: #b8c4d8;
+        border: 1px solid #2f3d5e;
+        border-radius: 5px;
+        padding: 5px 9px;
+        cursor: pointer;
+      }
+      button.active {
+        background: #2b5c46;
+        color: #aef5cf;
+        border-color: #3f8a67;
+      }
+      label.chk {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #8fa0bd;
+      }
+      input[type='range'] {
+        width: 100%;
+      }
+      #inspector {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: max(10px, env(safe-area-inset-bottom));
+        background: rgba(8, 12, 24, 0.88);
+        border: 1px solid #2a3550;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 12px;
+        min-width: 250px;
+        display: none;
+      }
+      #inspector.open {
+        display: block;
+      }
+      #inspector h3 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        color: #7fe8b0;
+        letter-spacing: 1px;
+      }
+      .bar {
+        height: 6px;
+        background: #1a2438;
+        border-radius: 3px;
+        overflow: hidden;
+        margin: 4px 0 8px;
+      }
+      .bar > div {
+        height: 100%;
+        background: linear-gradient(90deg, #2fbf7f, #7fe8b0);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div id="inspector"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
