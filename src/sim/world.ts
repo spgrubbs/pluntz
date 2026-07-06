@@ -1,9 +1,9 @@
-import { v, fromAngle, scale } from './vec';
+import { v, fromAngle, scale, add, norm, sub, dist, distToSegment, len } from './vec';
 import type { Vec2 } from './vec';
 import { makeRng } from './rng';
-import type { Asteroid, MapDef, World } from './types';
+import type { Asteroid, Debris, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
-import { createPlant, stepPlant } from './plant';
+import { createPlant, stepPlant, damagePart } from './plant';
 import type { CanopySeg } from './light';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
@@ -36,7 +36,9 @@ export function createWorld(map: MapDef, seed: number): World {
     },
     asteroids: [],
     plants: [],
+    debris: [],
     nextId: 1,
+    debrisPerMin: map.debris?.perMin ?? 0,
   };
   for (const def of map.asteroids) {
     const ast: Asteroid = {
@@ -63,6 +65,92 @@ export function stepWorld(world: World, dt: number): void {
   }
   const canopy = collectCanopy(world);
   for (const plant of world.plants) stepPlant(world, plant, dt, canopy);
+  stepDebris(world, dt);
+}
+
+/** Spawn a drifting rock. Exposed for the debug panel and tests. */
+export function spawnDebris(world: World, pos: Vec2, vel: Vec2, radius: number): Debris {
+  const d: Debris = {
+    id: world.nextId++,
+    pos: { ...pos },
+    vel: { ...vel },
+    radius,
+    angle: 0,
+    spin: world.rng.range(-TUNING.debris.spinMax, TUNING.debris.spinMax),
+  };
+  world.debris.push(d);
+  return d;
+}
+
+function spawnAmbientDebris(world: World): void {
+  const rng = world.rng;
+  const hw = world.width / 2;
+  const hh = world.height / 2;
+  // random point on the map edge, drifting toward a random interior point
+  const side = rng.int(4);
+  const pos =
+    side === 0
+      ? v(rng.range(-hw, hw), -hh)
+      : side === 1
+        ? v(rng.range(-hw, hw), hh)
+        : side === 2
+          ? v(-hw, rng.range(-hh, hh))
+          : v(hw, rng.range(-hh, hh));
+  const target = v(rng.range(-hw * 0.5, hw * 0.5), rng.range(-hh * 0.5, hh * 0.5));
+  const speed = rng.range(TUNING.debris.ambientSpeed[0], TUNING.debris.ambientSpeed[1]);
+  const vel = scale(norm(sub(target, pos)), speed);
+  spawnDebris(world, pos, vel, rng.range(TUNING.debris.radius[0], TUNING.debris.radius[1]));
+}
+
+function stepDebris(world: World, dt: number): void {
+  const D = TUNING.debris;
+  if (world.debrisPerMin > 0 && world.rng.next() < (world.debrisPerMin / 60) * dt) {
+    spawnAmbientDebris(world);
+  }
+
+  const boundX = (world.width / 2) * D.boundsMargin;
+  const boundY = (world.height / 2) * D.boundsMargin;
+  for (let i = world.debris.length - 1; i >= 0; i--) {
+    const d = world.debris[i];
+    d.pos.x += d.vel.x * dt;
+    d.pos.y += d.vel.y * dt;
+    d.angle += d.spin * dt;
+    if (Math.abs(d.pos.x) > boundX || Math.abs(d.pos.y) > boundY) {
+      world.debris.splice(i, 1);
+      continue;
+    }
+
+    let destroyed = false;
+    // plants first — the canopy stands above the rock surface and takes the hit
+    outer: for (const plant of world.plants) {
+      if (!plant.alive) continue;
+      const ast = world.asteroids.find((a) => a.id === plant.asteroidId);
+      if (!ast) continue;
+      // cheap reject: debris far from this asteroid's garden
+      if (dist(d.pos, ast.pos) > ast.radius + 220) continue;
+      for (const p of plant.parts) {
+        if (p.dead) continue;
+        const a = add(ast.pos, p.base);
+        const b = add(ast.pos, p.tip);
+        const slack = d.radius + D.hitSlack + (p.kind === 'heart' ? 9 : 0);
+        if (distToSegment(d.pos, a, b) < slack) {
+          const dmg = d.radius * len(d.vel) * D.dmgFactor;
+          damagePart(plant, p.id, dmg);
+          destroyed = true;
+          break outer;
+        }
+      }
+    }
+    if (!destroyed) {
+      for (const a of world.asteroids) {
+        if (dist(d.pos, a.pos) < d.radius + a.radius) {
+          destroyed = true;
+          break;
+        }
+      }
+    }
+    if (destroyed) world.debris.splice(i, 1);
+  }
 }
 
 /** World-space leaf segments from every plant — the canopy occluder set. */
@@ -72,7 +160,7 @@ function collectCanopy(world: World): CanopySeg[] {
     const ast = world.asteroids.find((a) => a.id === plant.asteroidId);
     if (!ast) continue;
     for (const p of plant.parts) {
-      if (p.kind !== 'leaf') continue;
+      if (p.kind !== 'leaf' || p.dead) continue;
       // occlude with the central 70% of the fan — needle tips are porous
       segs.push({
         ax: ast.pos.x + p.base.x + (p.tip.x - p.base.x) * 0.15,
@@ -99,10 +187,18 @@ export function hashWorld(world: World): number {
   for (const p of world.plants) {
     mix(p.energy * 100);
     mix(p.parts.length);
+    mix(p.alive ? 1 : 0);
     for (const part of p.parts) {
       mix(part.tip.x);
       mix(part.tip.y);
+      mix(part.hp * 100);
+      mix(part.dead ? 1 : 0);
     }
+  }
+  mix(world.debris.length);
+  for (const d of world.debris) {
+    mix(d.pos.x);
+    mix(d.pos.y);
   }
   return h;
 }

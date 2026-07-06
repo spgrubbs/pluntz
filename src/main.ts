@@ -1,12 +1,15 @@
 import { Application, Container } from 'pixi.js';
-import { createWorld, stepWorld } from './sim/world';
+import { createWorld, stepWorld, spawnDebris } from './sim/world';
+import { pruneAlongPath } from './sim/plant';
 import type { Asteroid, World } from './sim/types';
-import { dist, type Vec2 } from './sim/vec';
+import { add, dist, norm, scale, sub, fromAngle, type Vec2 } from './sim/vec';
 import { DEV01 } from './content/maps/dev01';
 import { TUNING } from './content/tuning';
 import { Starfield } from './render/starfield';
 import { WorldView } from './render/worldView';
 import { PlantView } from './render/plantView';
+import { DebrisView } from './render/debrisView';
+import { PruneView } from './render/pruneView';
 import { Camera } from './ui/camera';
 import { DebugPanel } from './ui/debugPanel';
 import { Inspector } from './ui/inspector';
@@ -32,38 +35,70 @@ async function boot(): Promise<void> {
   const worldRoot = new Container();
   const worldView = new WorldView();
   const plantView = new PlantView();
-  worldRoot.addChild(worldView.container, plantView.container);
+  const debrisView = new DebrisView();
+  const pruneView = new PruneView();
+  worldRoot.addChild(worldView.container, plantView.container, debrisView.g, pruneView.g);
   app.stage.addChild(starfield.container, worldRoot);
 
   // --- Interaction state -------------------------------------------------------
   let speed = 1;
   let moveRocks = false;
+  let pruneMode = false;
+  let prunePath: Vec2[] | null = null;
   let draggedRock: Asteroid | null = null;
   const inspector = new Inspector();
 
   const homeAst = world.asteroids[0];
   const camera = new Camera(app.canvas, world.width, world.height, {
     onDragStart(worldPos: Vec2): boolean {
+      if (pruneMode) {
+        prunePath = [worldPos];
+        return true;
+      }
       if (!moveRocks) return false;
       draggedRock =
         world.asteroids.find((a) => dist(a.pos, worldPos) < a.radius + 20) ?? null;
       return draggedRock !== null;
     },
     onDragMove(worldPos: Vec2): void {
+      if (prunePath) {
+        const last = prunePath[prunePath.length - 1];
+        if (dist(last, worldPos) > 4) prunePath.push(worldPos);
+        return;
+      }
       if (draggedRock) {
         draggedRock.pos.x = worldPos.x;
         draggedRock.pos.y = worldPos.y;
       }
     },
     onDragEnd(): void {
+      if (prunePath) {
+        for (const plant of world.plants) pruneAlongPath(world, plant, prunePath);
+        prunePath = null;
+        return;
+      }
       draggedRock = null;
     },
     onTap(worldPos: Vec2): void {
+      if (pruneMode) return; // taps in prune mode are just aborted swipes
       const hit = pickPlant(world, worldPos, 26 / camera.zoom);
       if (hit !== null) inspector.show(hit);
       else inspector.hide();
     },
   });
+
+  // --- Action bar (player verbs — Prune is the first) ---------------------------
+  const actionBar = document.createElement('div');
+  actionBar.className = 'actionbar';
+  const pruneBtn = document.createElement('button');
+  pruneBtn.textContent = '✂ prune';
+  pruneBtn.addEventListener('click', () => {
+    pruneMode = !pruneMode;
+    prunePath = null;
+    pruneBtn.classList.toggle('active', pruneMode);
+  });
+  actionBar.appendChild(pruneBtn);
+  document.getElementById('ui')!.appendChild(actionBar);
   camera.x = homeAst.pos.x;
   camera.y = homeAst.pos.y - 60;
   camera.zoom = 1.4;
@@ -74,6 +109,26 @@ async function boot(): Promise<void> {
     setSunAngleDeg: (deg) => (world.sun.angle = (deg * Math.PI) / 180),
     setDayCycle: (on) => (world.sun.cycle = on),
     setMoveRocks: (on) => (moveRocks = on),
+    spawnDebris: () => {
+      // aimed shot: from off-canopy toward the first living plant's crown
+      const plant = world.plants.find((p) => p.alive);
+      const ast = plant && world.asteroids.find((a) => a.id === plant.asteroidId);
+      let target = { x: 0, y: 0 };
+      if (plant && ast) {
+        let n = 0;
+        const sum = { x: 0, y: 0 };
+        for (const p of plant.parts) {
+          if (p.dead) continue;
+          sum.x += ast.pos.x + p.tip.x;
+          sum.y += ast.pos.y + p.tip.y;
+          n++;
+        }
+        if (n > 0) target = { x: sum.x / n, y: sum.y / n };
+      }
+      const from = add(target, scale(fromAngle(world.rng.range(0, Math.PI * 2)), 700));
+      const vel = scale(norm(sub(target, from)), TUNING.debris.debugSpeed);
+      spawnDebris(world, from, vel, world.rng.range(8, 13));
+    },
     reset: (reseed) => {
       if (reseed) seed = (Date.now() % 0xffffffff) >>> 0;
       world = createWorld(DEV01, seed);
@@ -114,6 +169,8 @@ async function boot(): Promise<void> {
 
     worldView.update(world);
     plantView.update(world);
+    debrisView.update(world);
+    pruneView.update(prunePath);
     inspector.update(world);
 
     panel.update({
@@ -122,11 +179,20 @@ async function boot(): Promise<void> {
       parts: world.plants.reduce((n, p) => n + p.parts.length, 0),
       plants: world.plants.length,
       asteroids: world.asteroids.length,
+      debris: world.debris.length,
       sunAngleDeg: (world.sun.angle * 180) / Math.PI,
       seed,
       simTime: world.time,
     });
   });
+
+  // debug hook for automation and console tinkering
+  (window as unknown as Record<string, unknown>).__pluntz = {
+    get world() {
+      return world;
+    },
+    camera,
+  };
 }
 
 function pickPlant(world: World, at: Vec2, radius: number): number | null {

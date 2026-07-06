@@ -22,4 +22,15 @@ export const TUNING = {
     asteroidVerts: [10, 15] as [number, number], // min/max polygon vertices
     asteroidRoughness: 0.16, // radial jitter fraction
   },
+
+  debris: {
+    radius: [5, 13] as [number, number],
+    ambientSpeed: [16, 42] as [number, number],
+    debugSpeed: 70, // the debug panel's aimed shot
+    spinMax: 2.5, // rad/s
+    /** impact damage = radius * speed * dmgFactor */
+    dmgFactor: 0.04,
+    hitSlack: 2.5, // extra collision width around plant segments
+    boundsMargin: 1.25, // despawn beyond bounds * margin
+  },
 } as const;

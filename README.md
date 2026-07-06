@@ -5,8 +5,8 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M2.1 — autonomous Pinophyta plant with two-tier shading (canopy vs. rock
-  shadow, including self-shading) and an explainer inspector.
+- **Status:** M3 — life & death: HP, bark hardening, needle lifespans, starvation
+  cascade, drifting debris, husks, and the first player verb: Prune.
 
 ## Development
 
@@ -21,7 +21,21 @@ npm run build    # typecheck + production bundle in dist/
 
 **URL params:** `?seed=123` fixes the world seed (also shown in the debug panel).
 
-## Current test script (M0–M2)
+## Current test script (M3)
+
+1. **Prune:** tap **✂ prune** (bottom right), swipe across a mid-trunk segment — the
+   whole top falls dead (gray husk), energy is partially refunded, and the spire
+   regrows through the wound. Swiping the heartseed does nothing (uncuttable).
+2. **Debris:** rocks drift in ambiently (~1.5/min); watch one shatter on a rock or
+   clip the canopy. Hit **spawn debris** in the debug panel for an aimed shot at the
+   crown. Old bark-hardened trunk shrugs off small hits; needles and young wood die.
+3. **Starve-out:** enable **move rocks**, park a big asteroid sunward of the colony,
+   and wait: energy drains, then needles wither, then wood, then the heart — a full
+   husk. The inspector narrates each stage.
+4. **Aging:** needles have lifespans — watch old fans drop and regrow on a mature
+   tree; trunk segments darken as they harden.
+
+## Earlier scripts (M0–M2)
 
 1. Open the build. Pan with one finger / mouse drag, pinch or scroll to zoom —
    starfield parallaxes, 60fps in the debug panel.

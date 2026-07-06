@@ -23,6 +23,19 @@ export interface PlantStatus {
 export function plantStatus(plant: Plant): PlantStatus {
   const f = FACTIONS[plant.faction];
   const g = f.growth;
+  if (!plant.alive) {
+    return {
+      intent: 'mature',
+      aim: 'a husk — dead wood drifting in the light',
+      warning: 'the colony is dead',
+      saving: false,
+      trunkSegs: plant.trunkSegs,
+      trunkTarget: g.trunkTarget,
+      budsActive: 0,
+      budsDone: plant.buds.length,
+      needleSlotsOpen: 0,
+    };
+  }
   const spendable = plant.energy - f.energy.reserve;
   const deficit = leafDeficit(plant, f);
   const budsActive = plant.buds.filter((b) => b.steps < b.maxSteps).length;

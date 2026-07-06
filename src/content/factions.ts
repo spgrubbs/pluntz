@@ -27,12 +27,25 @@ export interface FactionDef {
     capBase: number;
     capPerPart: number;
     reserve: number; // growth never spends below this
-    heartIncome: number; // baseline trickle so a colony can't hard-stall at zero
+    /** Seed-reserve trickle. MUST stay below upkeep.heart, or a fully shaded
+     * lone heart becomes an immortal dormant seed that never starves out. */
+    heartIncome: number;
     leafIncome: number; // energy/sec per fully lit, well-angled leaf
     minAngleEff: number; // efficiency floor vs. bad sun angle
     canopyShade: number; // income multiplier under foliage (own or rival)
     shadeFloor: number; // income multiplier in hard rock shadow (evergreen floor)
     upkeep: { heart: number; root: number; stem: number; leaf: number };
+  };
+  life: {
+    hp: { heart: number; root: number; stem: number; leaf: number };
+    hpVariance: number; // ± fraction rolled per part
+    /** Damage/sec while the colony is at zero energy, applied as a cascade:
+     * leaves wither first, then stems+roots, the heart last. */
+    starveDps: { leaf: number; stem: number; root: number; heart: number };
+    hardenAge: number; // stems older than this gain bark once
+    hardenBonus: number; // extra hp (and maxHp) from bark
+    leafLifespan: [number, number]; // natural needle lifespan range, seconds
+    pruneRefund: number; // fraction of build cost returned when pruning
   };
   growth: {
     actionCooldown: number; // seconds between growth actions
@@ -90,12 +103,21 @@ export const PINOPHYTA: FactionDef = {
       { id: 'mature', text: 'Mature: store energy (cones arrive in M4)' },
     ],
   },
+  life: {
+    hp: { heart: 60, root: 30, stem: 25, leaf: 10 },
+    hpVariance: 0.2,
+    starveDps: { leaf: 0.8, stem: 0.35, root: 0.35, heart: 0.8 },
+    hardenAge: 45,
+    hardenBonus: 15,
+    leafLifespan: [130, 210],
+    pruneRefund: 0.4,
+  },
   energy: {
     heartInitial: 45,
     capBase: 60,
     capPerPart: 2,
     reserve: 4,
-    heartIncome: 0.2,
+    heartIncome: 0.1,
     leafIncome: 1.2,
     minAngleEff: 0.35,
     canopyShade: 0.5,

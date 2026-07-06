@@ -10,6 +10,7 @@ export const DEV01: MapDef = {
   width: 2400,
   height: 1600,
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 240 },
+  debris: { perMin: 1.5 },
   asteroids: [
     { x: 0, y: 120, r: 95, rich: false }, // home rock
     { x: -520, y: -260, r: 70 },

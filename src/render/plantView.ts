@@ -48,26 +48,35 @@ export class PlantView {
   }
 }
 
+const HUSK_STEM = 0x5a5348;
+const HUSK_ROOT = 0x49423a;
+const HUSK_HEART = 0x6b6257;
+
 function drawPlant(g: Graphics, plant: Plant): void {
   const f = FACTIONS[plant.faction];
   const c = f.colors;
-  const starving = plant.energy < plant.capacity * 0.15;
+  const starving = plant.alive && plant.energy < plant.capacity * 0.15;
   g.clear();
 
   for (const p of plant.parts) {
+    if (p.dead && p.kind === 'leaf') continue; // dead needles simply drop
     switch (p.kind) {
       case 'root': {
         g.moveTo(p.base.x, p.base.y)
           .lineTo(p.tip.x, p.tip.y)
-          .stroke({ width: 3.5, color: c.root, alpha: 0.9 });
+          .stroke({ width: 3.5, color: p.dead ? HUSK_ROOT : c.root, alpha: 0.9 });
         break;
       }
       case 'stem': {
-        const old = p.age > 45;
+        const old = p.hardened;
         const width = p.onBranch ? 2.2 : Math.max(4.5 - p.depth * 0.18, 2.6);
         g.moveTo(p.base.x, p.base.y)
           .lineTo(p.tip.x, p.tip.y)
-          .stroke({ width, color: old ? c.stemOld : c.stem });
+          .stroke({
+            width,
+            color: p.dead ? HUSK_STEM : old ? c.stemOld : c.stem,
+            alpha: p.dead ? 0.8 : 1,
+          });
         break;
       }
       case 'leaf': {
@@ -90,6 +99,11 @@ function drawPlant(g: Graphics, plant: Plant): void {
         break;
       }
       case 'heart': {
+        if (p.dead) {
+          g.circle(p.base.x, p.base.y, 9).fill({ color: HUSK_HEART, alpha: 0.7 });
+          g.circle(p.base.x, p.base.y, 4.2).fill({ color: 0x3a352e });
+          break;
+        }
         const ratio = Math.max(0, Math.min(1, plant.energy / plant.capacity));
         g.circle(p.base.x, p.base.y, 9).fill({ color: c.heart, alpha: 0.9 });
         g.circle(p.base.x, p.base.y, 4.2).fill({ color: c.heartCore });

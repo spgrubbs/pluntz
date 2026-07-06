@@ -92,6 +92,25 @@
         color: #aef5cf;
         border-color: #3f8a67;
       }
+      .actionbar {
+        position: absolute;
+        right: 10px;
+        bottom: max(14px, env(safe-area-inset-bottom));
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .actionbar button {
+        font-size: 14px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: rgba(24, 34, 56, 0.9);
+      }
+      .actionbar button.active {
+        background: #6b3f2b;
+        color: #ffc9a8;
+        border-color: #a05c3a;
+      }
       label.chk {
         display: flex;
         align-items: center;

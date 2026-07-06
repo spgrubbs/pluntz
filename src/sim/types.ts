@@ -23,6 +23,11 @@ export interface Part {
   side: number; // -1 | 0 | 1, which side it sprouted on
   leafCount: number; // stems only
   age: number; // seconds of sim time
+  hp: number;
+  maxHp: number;
+  dead: boolean; // dead parts stay in the array (stable indices); husk render
+  hardened: boolean; // old stems gain bark once
+  maxAge: number; // natural lifespan (leaves); 0 = immortal
   shade: ShadeLevel; // leaves only: last light query result
   /**
    * Occlusion group: needles never shade needles of the same group (a branch
@@ -43,6 +48,7 @@ export interface BranchBud {
 
 export interface Plant {
   id: number;
+  alive: boolean; // false once the heart dies — the whole plant is husk
   faction: FactionId;
   asteroidId: number;
   anchorAngle: number; // radians on the asteroid surface
@@ -83,6 +89,16 @@ export interface SunState {
   cycleRate: number; // radians/sec when cycling
 }
 
+/** A drifting rock: the ambient hazard. Shatters on asteroids and plants. */
+export interface Debris {
+  id: number;
+  pos: Vec2;
+  vel: Vec2;
+  radius: number;
+  angle: number;
+  spin: number;
+}
+
 export interface World {
   seed: number;
   rng: RNG;
@@ -93,7 +109,9 @@ export interface World {
   sun: SunState;
   asteroids: Asteroid[];
   plants: Plant[];
+  debris: Debris[];
   nextId: number;
+  debrisPerMin: number;
 }
 
 export interface MapDef {
@@ -102,6 +120,7 @@ export interface MapDef {
   width: number;
   height: number;
   sun: { angleDeg: number; cycle: boolean; cyclePeriodSec: number };
+  debris?: { perMin: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
   spawns: { asteroid: number; anchorDeg: number; faction: FactionId }[];
 }

@@ -86,12 +86,20 @@ export class Inspector {
       aimEl.classList.remove('warn');
     }
 
-    const pct = Math.round((plant.energy / plant.capacity) * 100);
-    r.energy.textContent = `${plant.energy.toFixed(1)} / ${plant.capacity} (${pct}%)`;
-    r.bar.style.width = `${pct}%`;
-    r.net.textContent = `${net >= 0 ? '+' : ''}${net.toFixed(2)}/s (${plant.lastIncome.toFixed(2)} in, ${plant.lastUpkeep.toFixed(2)} up)`;
-    r.net.style.color = net >= 0 ? '#7fe8b0' : '#f28a7a';
-    r.needles.textContent = `${plant.litLeaves} lit · ${plant.canopyLeaves} canopy · ${plant.shadowLeaves} shadow`;
+    if (!plant.alive) {
+      r.energy.textContent = '—';
+      r.bar.style.width = '0%';
+      r.net.textContent = '—';
+      r.net.style.color = '#8fa0bd';
+      r.needles.textContent = 'dropped';
+    } else {
+      const pct = Math.round((plant.energy / plant.capacity) * 100);
+      r.energy.textContent = `${plant.energy.toFixed(1)} / ${plant.capacity} (${pct}%)`;
+      r.bar.style.width = `${pct}%`;
+      r.net.textContent = `${net >= 0 ? '+' : ''}${net.toFixed(2)}/s (${plant.lastIncome.toFixed(2)} in, ${plant.lastUpkeep.toFixed(2)} up)`;
+      r.net.style.color = net >= 0 ? '#7fe8b0' : '#f28a7a';
+      r.needles.textContent = `${plant.litLeaves} lit · ${plant.canopyLeaves} canopy · ${plant.shadowLeaves} shadow`;
+    }
 
     // highlight the active priority
     this.el.querySelectorAll<HTMLElement>('[data-prio]').forEach((li) => {
@@ -101,8 +109,9 @@ export class Inspector {
     r.branches.textContent = `${s.budsActive} growing · ${s.budsDone} finished`;
     r.slots.textContent = String(s.needleSlotsOpen);
 
-    // energy detail
-    const count = (k: string): number => plant.parts.filter((p) => p.kind === k).length;
+    // energy detail (alive parts only — husk costs nothing)
+    const count = (k: string): number =>
+      plant.parts.filter((p) => p.kind === k && !p.dead).length;
     const stems = count('stem');
     const roots = count('root');
     r.leafIncome.textContent = `+${(plant.lastIncome - f.energy.heartIncome).toFixed(2)}/s`;
@@ -111,6 +120,7 @@ export class Inspector {
     r.upLeaves.textContent = `−${(plant.totalLeaves * f.energy.upkeep.leaf).toFixed(2)}/s (${plant.totalLeaves})`;
     r.upCore.textContent = `−${(f.energy.upkeep.heart + roots * f.energy.upkeep.root).toFixed(2)}/s`;
     const t = Math.floor(plant.age);
-    r.parts.textContent = `${plant.parts.length} / ${Math.floor(t / 60)}m ${t % 60}s`;
+    const alive = plant.parts.filter((p) => !p.dead).length;
+    r.parts.textContent = `${alive}/${plant.parts.length} alive · ${Math.floor(t / 60)}m ${t % 60}s`;
   }
 }

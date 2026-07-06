@@ -26,3 +26,25 @@ export function rot(a: Vec2, ang: number): Vec2 {
 export const fromAngle = (a: number): Vec2 => ({ x: Math.cos(a), y: Math.sin(a) });
 
 export const DEG = Math.PI / 180;
+
+/** Distance from point p to segment a-b. */
+export function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const l2 = abx * abx + aby * aby;
+  if (l2 < 1e-9) return Math.hypot(p.x - a.x, p.y - a.y);
+  let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+}
+
+/** Do segments a-b and c-d properly intersect? */
+export function segsIntersect(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
+  const o = (p: Vec2, q: Vec2, r: Vec2): number =>
+    (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const o1 = o(a, b, c);
+  const o2 = o(a, b, d);
+  const o3 = o(c, d, a);
+  const o4 = o(c, d, b);
+  return o1 * o2 < 0 && o3 * o4 < 0;
+}
