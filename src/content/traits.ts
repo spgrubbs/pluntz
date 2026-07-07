@@ -10,6 +10,18 @@ export interface TraitDef {
 
 /** Per-round mutation tree. Traits apply colony-wide to future growth. */
 export const TRAITS: Record<FactionId, TraitDef[]> = {
+  anthophyta: [
+    { id: 'broadneedle', name: 'Sunleaf', cost: 3, tier: 1, desc: 'Leaves earn +20% light income.' },
+    { id: 'taproots', name: 'Tuber Reserves', cost: 3, tier: 1, desc: 'New seedlings sprout with +15 energy.' },
+    { id: 'ironbark', name: 'Woody Stems', cost: 3, tier: 1, desc: 'Runners lignify at half the age, +5 extra hp.' },
+    { id: 'cuticle', name: 'Waxy Cuticle', cost: 3, tier: 1, desc: 'Canopy-shaded leaves keep 65% income (was 45%).' },
+    { id: 'tallcrown', name: 'Long Runners', cost: 4, tier: 2, desc: 'Runners race 4 segments further.' },
+    { id: 'swiftcones', name: 'Quick Blooms', cost: 4, tier: 2, desc: 'Flowers ripen 50% faster.' },
+    { id: 'resin', name: 'Bitter Sap', cost: 4, tier: 2, desc: 'Overgrowth contact deals +50% damage.' },
+    { id: 'longshot', name: 'Pulp Sling', cost: 4, tier: 2, desc: 'Self-dropped fruit tosses 35% further.' },
+    { id: 'greatboughs', name: 'Lush Shoots', cost: 5, tier: 3, desc: 'Every side shoot extends one segment further.' },
+    { id: 'martial', name: 'Thorned Vines', cost: 5, tier: 3, desc: 'Contact damage taken −40%.' },
+  ],
   pinophyta: [
     { id: 'broadneedle', name: 'Broadneedle', cost: 3, tier: 1, desc: 'Needles earn +20% light income.' },
     { id: 'taproots', name: 'Deep Taproots', cost: 3, tier: 1, desc: 'New seedlings sprout with +15 energy.' },
@@ -28,6 +40,18 @@ export const TRAITS: Record<FactionId, TraitDef[]> = {
 
 /** Scripted purchase order for AI colonies. */
 export const AI_TRAIT_ORDER: Record<FactionId, string[]> = {
+  anthophyta: [
+    'swiftcones',
+    'broadneedle',
+    'ironbark',
+    'tallcrown',
+    'resin',
+    'martial',
+    'taproots',
+    'longshot',
+    'greatboughs',
+    'cuticle',
+  ],
   pinophyta: [
     'swiftcones',
     'ironbark',

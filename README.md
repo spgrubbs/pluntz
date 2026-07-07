@@ -5,9 +5,9 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M5 — the first real round: Verdance (you) vs Rustspire (AI) on the
-  *First Contact* map. Shading warfare, overgrowth contact damage, seed strikes,
-  domination win/lose, and a 15-minute timer before the sun fades.
+- **Status:** M7 — two factions, a strategy layer, and living fauna. Pinophyta
+  spires vs Anthophyta vines; Essence, traits, Bless, instincts, Canopy win;
+  Frugivora / Phytophaga / Anthophila; verbs: Ping, Prune, Bless, Lure.
 
 ## Development
 
@@ -22,7 +22,23 @@ npm run build    # typecheck + production bundle in dist/
 
 **URL params:** `?seed=123` fixes the world seed (also shown in the debug panel).
 
-## Current test script (M5)
+## Current test script (M6-M7)
+
+1. **Strategy:** the round chip shows your essence (⬡). Open **⬡ evolve** for the
+   trait tree and the two instinct sliders (fortify↔expand, spread↔tall). Essence
+   comes from surviving, colonizing fresh rocks, and rival deaths. **✦ bless** a
+   plant for a 25s growth surge. The AI buys traits too.
+2. **Canopy win:** hold 55% of all lit rock surface (your substrate beds are your
+   territory) for 45s — the chip narrates any active hold. Domination still works.
+3. **Anthophyta:** open `?faction=anthophyta` — you now play sprawling vines with
+   broad leaves and flowers. Flowers bloom (faster when an Anthophila mote visits),
+   ripen into fruit, and Frugivora birds carry your seeds map-distances. Phytophaga
+   grazers find your leaves delicious — **✿ lure** (2⬡) drops a scent that pulls
+   grazers anywhere (aim it at the rival) and steers your birds' deliveries.
+4. **Matchups:** `?ai=anthophyta` for vine-vs-vine or spire-vs-vine either way.
+5. Balance flag for playtest: bird delivery may be too strong vs ballistic cones.
+
+## Earlier scripts (M5)
 
 1. Open the default map (**First Contact**): you're the green Verdance colony (west);
    the rust-orange **Rustspire** AI starts east and fires its cones fast. The chip at

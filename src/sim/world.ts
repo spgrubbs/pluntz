@@ -4,7 +4,7 @@ import { makeRng } from './rng';
 import type { Asteroid, Debris, FactionId, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
 import { FACTIONS } from '../content/factions';
-import { createPlant, stepPlant, damagePart } from './plant';
+import { createPlant, stepPlant, damagePart, killPart } from './plant';
 import { canopyCross, isLit, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
 import { emit, setEventSink } from './events';
 import { colonyMods, buyTrait } from './stats';
@@ -44,7 +44,9 @@ export function createWorld(map: MapDef, seed: number): World {
     colonies: [],
     seeds: [],
     debris: [],
+    fauna: [],
     ping: null,
+    lure: null,
     events: [],
     nextId: 1,
     debrisPerMin: map.debris?.perMin ?? 0,
@@ -87,7 +89,253 @@ export function createWorld(map: MapDef, seed: number): World {
       createPlant(world, ast, s.anchorDeg * (Math.PI / 180), colony.faction, colony.id),
     );
   }
+  const fauna = map.fauna ?? { frugivora: 0, phytophaga: 0, anthophila: 0 };
+  for (const kind of ['frugivora', 'phytophaga', 'anthophila'] as const) {
+    for (let i = 0; i < fauna[kind]; i++) {
+      world.fauna.push({
+        id: world.nextId++,
+        kind,
+        pos: v(rng.range(-map.width / 2, map.width / 2), rng.range(-map.height / 2, map.height / 2)),
+        vel: v(0, 0),
+        state: 'wander',
+        targetPlant: -1,
+        targetPart: -1,
+        targetAst: -1,
+        carryColony: -1,
+        carryFaction: null,
+        waypoint: v(rng.range(-map.width / 3, map.width / 3), rng.range(-map.height / 3, map.height / 3)),
+        timer: rng.range(2, 8),
+      });
+    }
+  }
   return world;
+}
+
+/** The Lure verb: a 40s scent that pulls fauna. Costs essence. */
+export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
+  const colony = world.colonies.find((c) => c.id === colonyId);
+  if (!colony || colony.essence < 2) return false;
+  colony.essence -= 2;
+  world.lure = { x: pos.x, y: pos.y, colonyId, expires: world.time + 40 };
+  return true;
+}
+
+const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70 };
+const GRAZE_APPEAL = { anthophyta: 3, pinophyta: 0.4 } as const;
+
+function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: number): void {
+  const want = scale(norm(sub(target, fn.pos)), speed);
+  const k = Math.min(3 * dt, 1);
+  fn.vel.x += (want.x - fn.vel.x) * k;
+  fn.vel.y += (want.y - fn.vel.y) * k;
+  fn.pos.x += fn.vel.x * dt;
+  fn.pos.y += fn.vel.y * dt;
+}
+
+function faunaWanderTick(world: World, fn: import('./types').Fauna, dt: number): void {
+  fn.timer -= dt;
+  if (fn.timer <= 0 || dist(fn.pos, fn.waypoint) < 30) {
+    fn.waypoint = v(
+      world.rng.range(-world.width / 2.4, world.width / 2.4),
+      world.rng.range(-world.height / 2.4, world.height / 2.4),
+    );
+    fn.timer = world.rng.range(4, 9);
+  }
+  steer(fn, fn.waypoint, FAUNA_SPEED[fn.kind] * 0.6, dt);
+}
+
+/** Ripe fruit (armed fauna-style cones) not yet claimed by another bird. */
+function findRipeFruit(
+  world: World,
+  claimedBy: import('./types').Fauna,
+): { plant: import('./types').Plant; part: import('./types').Part } | null {
+  let best: { plant: import('./types').Plant; part: import('./types').Part } | null = null;
+  let bestD = Infinity;
+  for (const plant of world.plants) {
+    if (!plant.alive || FACTIONS[plant.faction].repro.style !== 'fauna') continue;
+    for (const p of plant.parts) {
+      if (p.dead || p.kind !== 'cone' || p.armedAt < 0) continue;
+      const claimed = world.fauna.some(
+        (o) =>
+          o !== claimedBy &&
+          o.kind === 'frugivora' &&
+          o.state === 'toFruit' &&
+          o.targetPlant === plant.id &&
+          o.targetPart === p.id,
+      );
+      if (claimed) continue;
+      const d = dist(claimedBy.pos, { x: plant.astPos.x + p.tip.x, y: plant.astPos.y + p.tip.y });
+      if (d < bestD) {
+        bestD = d;
+        best = { plant, part: p };
+      }
+    }
+  }
+  return best;
+}
+
+function stepFauna(world: World, dt: number): void {
+  if (world.lure && world.time > world.lure.expires) world.lure = null;
+  for (const fn of world.fauna) {
+    switch (fn.kind) {
+      case 'frugivora': {
+        if (fn.state === 'wander') {
+          faunaWanderTick(world, fn, dt);
+          const fruit = findRipeFruit(world, fn);
+          if (fruit) {
+            fn.state = 'toFruit';
+            fn.targetPlant = fruit.plant.id;
+            fn.targetPart = fruit.part.id;
+          }
+        } else if (fn.state === 'toFruit') {
+          const plant = world.plants.find((p) => p.id === fn.targetPlant);
+          const part = plant?.parts[fn.targetPart];
+          if (!plant || !plant.alive || !part || part.dead || part.armedAt < 0) {
+            fn.state = 'wander';
+            break;
+          }
+          const at = { x: plant.astPos.x + part.tip.x, y: plant.astPos.y + part.tip.y };
+          steer(fn, at, FAUNA_SPEED.frugivora, dt);
+          if (dist(fn.pos, at) < 15) {
+            killPart(plant, part.id); // fruit plucked
+            fn.carryColony = plant.colonyId;
+            fn.carryFaction = plant.faction;
+            // choose a delivery rock: prefer near the carrier colony's lure,
+            // else an unsaturated rock anywhere on the map
+            let dest = null as import('./types').Asteroid | null;
+            let bestScore = 0;
+            for (const ast of world.asteroids) {
+              let own = 0;
+              for (const pl of world.plants) {
+                if (pl.alive && pl.asteroidId === ast.id && pl.colonyId === fn.carryColony) own++;
+              }
+              const slots = Math.max(2, Math.floor((Math.PI * 2 * ast.radius) / 48));
+              if (own >= Math.ceil(slots * 0.5)) continue;
+              let score = (ast.rich ? 1.3 : 1) / (1 + own * 2) + world.rng.next() * 0.3;
+              if (
+                world.lure &&
+                world.lure.colonyId === fn.carryColony &&
+                Math.hypot(world.lure.x - ast.pos.x, world.lure.y - ast.pos.y) < ast.radius + 160
+              ) {
+                score *= 6;
+              }
+              if (score > bestScore) {
+                bestScore = score;
+                dest = ast;
+              }
+            }
+            if (dest) {
+              fn.targetAst = dest.id;
+              fn.state = 'deliver';
+            } else {
+              fn.carryColony = -1;
+              fn.carryFaction = null;
+              fn.state = 'wander';
+            }
+          }
+        } else if (fn.state === 'deliver') {
+          const ast = world.asteroids.find((a) => a.id === fn.targetAst);
+          if (!ast || fn.carryFaction === null) {
+            fn.state = 'wander';
+            break;
+          }
+          steer(fn, ast.pos, FAUNA_SPEED.frugivora, dt);
+          const d = dist(fn.pos, ast.pos);
+          if (d < ast.radius + 18) {
+            const angle = Math.atan2(fn.pos.y - ast.pos.y, fn.pos.x - ast.pos.x);
+            sproutAt(world, fn.carryColony, fn.carryFaction, ast, angle);
+            fn.carryColony = -1;
+            fn.carryFaction = null;
+            fn.state = 'wander';
+            fn.timer = 0;
+          }
+        }
+        break;
+      }
+      case 'phytophaga': {
+        if (fn.state === 'wander') {
+          faunaWanderTick(world, fn, dt);
+          // sniff for the tastiest garden (lure trumps everything)
+          let target: import('./types').Plant | null = null;
+          let bestScore = 1.5; // apathy threshold
+          for (const plant of world.plants) {
+            if (!plant.alive || plant.totalLeaves < 4) continue;
+            const d = dist(fn.pos, plant.astPos);
+            if (d > 900) continue;
+            let score = (GRAZE_APPEAL[plant.faction] * plant.totalLeaves) / (60 + d * 0.05);
+            if (
+              world.lure &&
+              Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 260
+            ) {
+              score *= 8;
+            }
+            if (score > bestScore) {
+              bestScore = score;
+              target = plant;
+            }
+          }
+          if (target) {
+            fn.state = 'graze';
+            fn.targetPlant = target.id;
+            fn.targetPart = -1;
+            fn.timer = 22; // grazing session length
+          }
+        } else if (fn.state === 'graze') {
+          const plant = world.plants.find((p) => p.id === fn.targetPlant);
+          fn.timer -= dt;
+          if (!plant || !plant.alive || fn.timer <= 0) {
+            fn.state = 'wander';
+            fn.timer = 0;
+            break;
+          }
+          let leaf = fn.targetPart >= 0 ? plant.parts[fn.targetPart] : undefined;
+          if (!leaf || leaf.dead || leaf.kind !== 'leaf') {
+            // pick the nearest living leaf
+            let bestD = Infinity;
+            leaf = undefined;
+            for (const p of plant.parts) {
+              if (p.dead || p.kind !== 'leaf') continue;
+              const at = { x: plant.astPos.x + p.tip.x, y: plant.astPos.y + p.tip.y };
+              const d = dist(fn.pos, at);
+              if (d < bestD) {
+                bestD = d;
+                leaf = p;
+              }
+            }
+            if (!leaf) {
+              fn.state = 'wander';
+              break;
+            }
+            fn.targetPart = leaf.id;
+          }
+          const at = { x: plant.astPos.x + leaf.tip.x, y: plant.astPos.y + leaf.tip.y };
+          steer(fn, at, FAUNA_SPEED.phytophaga, dt);
+          if (dist(fn.pos, at) < 12) damagePart(plant, leaf.id, 2.5 * dt);
+        }
+        break;
+      }
+      case 'anthophila': {
+        // drift toward the nearest charging flower; otherwise wander
+        let flower: Vec2 | null = null;
+        let bestD = 700;
+        for (const plant of world.plants) {
+          if (!plant.alive || FACTIONS[plant.faction].repro.style !== 'fauna') continue;
+          for (const p of plant.parts) {
+            if (p.dead || p.kind !== 'cone' || p.armedAt >= 0) continue;
+            const at = { x: plant.astPos.x + p.tip.x, y: plant.astPos.y + p.tip.y };
+            const d = dist(fn.pos, at);
+            if (d < bestD) {
+              bestD = d;
+              flower = at;
+            }
+          }
+        }
+        if (flower) steer(fn, flower, FAUNA_SPEED.anthophila, dt);
+        else faunaWanderTick(world, fn, dt);
+        break;
+      }
+    }
+  }
 }
 
 /** Try to sprout a new plant on an asteroid surface; fails when crowded. */
@@ -235,6 +483,7 @@ export function stepWorld(world: World, dt: number): void {
   shareColonyEnergy(world, dt);
   stepSeeds(world, dt);
   stepDebris(world, dt);
+  stepFauna(world, dt);
   if (world.tick % 5 === 0) applyContactDamage(world, dt * 5);
   stepEssence(world);
   if (world.tick % 10 === 0) {
@@ -578,6 +827,10 @@ export function hashWorld(world: World): number {
   for (const s of world.seeds) {
     mix(s.pos.x);
     mix(s.pos.y);
+  }
+  for (const fn of world.fauna) {
+    mix(fn.pos.x);
+    mix(fn.pos.y);
   }
   return h;
 }

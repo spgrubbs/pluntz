@@ -22,6 +22,8 @@ export interface FactionColors {
 export interface FactionDef {
   id: FactionId;
   name: string;
+  /** Drawing styles: how parts read on screen. */
+  render: { leaf: 'needle' | 'broad'; heart: 'pinecone' | 'bulb'; repro: 'cone' | 'flower' };
   /** palettes[0] is the default; extra palettes distinguish same-faction colonies. */
   palettes: FactionColors[];
   /** Static text shown in the inspector's expandable behavior section. */
@@ -55,7 +57,9 @@ export interface FactionDef {
     pruneRefund: number; // fraction of build cost returned when pruning
   };
   repro: {
-    coneMax: number; // simultaneous cones
+    /** ballistic = launched seeds; fauna = ripe fruit carried by Frugivora. */
+    style: 'ballistic' | 'fauna';
+    coneMax: number; // simultaneous cones (or flowers)
     coneCost: number; // energy to bud a cone
     coneEnergy: number; // charge needed to arm
     chargeRate: number; // energy/s diverted into a charging cone
@@ -67,6 +71,8 @@ export interface FactionDef {
     minSpacing: number; // anchors closer than this on one rock fail to sprout
   };
   growth: {
+    /** spire = vertical trunk; vine = surface-hugging runners. */
+    style: 'spire' | 'vine';
     actionCooldown: number; // seconds between growth actions
     rootMax: number;
     rootCost: number;
@@ -90,6 +96,7 @@ export interface FactionDef {
     wUp: number;
     wSun: number;
     wNoise: number;
+    wTangent: number; // vines: bias along the rock surface
   };
 }
 
@@ -97,6 +104,7 @@ export interface FactionDef {
 export const PINOPHYTA: FactionDef = {
   id: 'pinophyta',
   name: 'Pinophyta',
+  render: { leaf: 'needle', heart: 'pinecone', repro: 'cone' },
   palettes: [
     {
       stem: 0x5d8a5f,
@@ -155,6 +163,7 @@ export const PINOPHYTA: FactionDef = {
     pruneRefund: 0.4,
   },
   repro: {
+    style: 'ballistic',
     coneMax: 2,
     coneCost: 8,
     coneEnergy: 30,
@@ -179,6 +188,7 @@ export const PINOPHYTA: FactionDef = {
     upkeep: { heart: 0.15, root: 0.05, stem: 0.06, leaf: 0.1, cone: 0.08 },
   },
   growth: {
+    style: 'spire',
     actionCooldown: 0.45,
     rootMax: 2,
     rootCost: 5,
@@ -201,9 +211,127 @@ export const PINOPHYTA: FactionDef = {
     wUp: 0.3,
     wSun: 0.13,
     wNoise: 0.05,
+    wTangent: 0,
+  },
+};
+
+/** ANTHOPHYTA — fast sprawling vines, flowers, fruit, and friendly fauna. */
+export const ANTHOPHYTA: FactionDef = {
+  id: 'anthophyta',
+  name: 'Anthophyta',
+  render: { leaf: 'broad', heart: 'bulb', repro: 'flower' },
+  palettes: [
+    {
+      stem: 0x5f9948,
+      stemOld: 0x497539,
+      leaf: 0x63e04e,
+      leafCanopy: 0x47a83b,
+      leafShaded: 0x2d6b2a,
+      leafStarving: 0xd8c34a,
+      root: 0x8a6d4f,
+      heart: 0xd94f8e,
+      heartCore: 0xffd257,
+      cone: 0xf262a8, // petals
+      coneArmed: 0xff9a3e, // ripe fruit
+      seed: 0xffe0b0,
+      litter: 0x5f5238, // fallen petals and loam
+    },
+    {
+      // alt palette: gilded cultivar
+      stem: 0x8f8748,
+      stemOld: 0x6b6539,
+      leaf: 0xd6d44e,
+      leafCanopy: 0xa8a53b,
+      leafShaded: 0x6b692a,
+      leafStarving: 0xd8c34a,
+      root: 0x8a6d4f,
+      heart: 0xd9a04f,
+      heartCore: 0xfff0a0,
+      cone: 0xf2c862,
+      coneArmed: 0xff6a3e,
+      seed: 0xfff0d0,
+      litter: 0x6b5f38,
+    },
+  ],
+  behavior: {
+    summary:
+      'A greedy sprawling vine. Anthophyta race along the rock surface with ' +
+      'broad, delicious leaves, then bloom: flowers ripen into fruit that ' +
+      'Frugivora carry across the void — unmatched reach, feathered dice. ' +
+      'Anthophila visiting a flower speed its bloom. Poor in shadow, fragile ' +
+      'in a fight, and Phytophaga find them delicious.',
+    priorities: [
+      { id: 'anchor', text: 'Anchor: tubers into the rock' },
+      { id: 'needles', text: 'Unfurl broad leaves on every runner' },
+      { id: 'trunk', text: 'Race the runner along the surface, sunward' },
+      { id: 'branches', text: 'Send short side shoots' },
+      { id: 'cones', text: 'Bloom; ripen fruit for the birds' },
+      { id: 'mature', text: 'Mature: store sugar and endure' },
+    ],
+  },
+  life: {
+    hp: { heart: 55, root: 25, stem: 18, leaf: 8, cone: 12 },
+    hpVariance: 0.2,
+    starveDps: { leaf: 1.2, stem: 0.5, root: 0.5, heart: 1.0, cone: 1.2 },
+    hardenAge: 60,
+    hardenBonus: 8,
+    leafLifespan: [90, 150],
+    pruneRefund: 0.4,
+  },
+  repro: {
+    style: 'fauna',
+    coneMax: 3,
+    coneCost: 6,
+    coneEnergy: 24,
+    chargeRate: 2.2,
+    armedAutoFire: 10, // fallback self-drop when no bird comes
+    aiAutoFire: 6,
+    seedSpeed: 80,
+    seedRange: 260, // short toss — Frugivora are the long game
+    seedStartEnergy: 30,
+    minSpacing: 48,
+  },
+  energy: {
+    heartInitial: 50,
+    capBase: 60,
+    capPerPart: 2,
+    reserve: 4,
+    heartIncome: 0.1,
+    leafIncome: 1.9,
+    minAngleEff: 0.35,
+    canopyShade: 0.45,
+    shadeFloor: 0.05,
+    upkeep: { heart: 0.15, root: 0.05, stem: 0.07, leaf: 0.16, cone: 0.1 },
+  },
+  growth: {
+    style: 'vine',
+    actionCooldown: 0.38,
+    rootMax: 2,
+    rootCost: 4,
+    rootLen: 12,
+    stemCost: 5,
+    leafCost: 5,
+    trunkTarget: 20,
+    trunkSegLen: 7.5,
+    trunkTaper: 0.05,
+    branchEvery: 3,
+    branchStartDepth: 4,
+    branchAngleDeg: 55,
+    branchSegLen: 6,
+    branchCurl: 0.1,
+    leafLen: 8.5,
+    leafAngleDeg: 75,
+    leavesPerTrunkStem: 2,
+    leavesPerBranchStem: 2,
+    wPrevDir: 0.4,
+    wUp: 0.12,
+    wSun: 0.1,
+    wNoise: 0.03,
+    wTangent: 0.35,
   },
 };
 
 export const FACTIONS: Record<FactionId, FactionDef> = {
   pinophyta: PINOPHYTA,
+  anthophyta: ANTHOPHYTA,
 };

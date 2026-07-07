@@ -169,36 +169,88 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors): void {
               ? c.leafCanopy
               : c.leafShaded;
         const alpha = p.shade === 0 ? 0.95 : p.shade === 1 ? 0.7 : 0.5;
-        for (const spread of [-0.38, 0, 0.38]) {
-          const d = rot(p.dir, spread);
-          const tip = add(p.base, scale(d, p.len * (spread === 0 ? 1 : 0.8)));
+        if (f.render.leaf === 'broad') {
+          // broad leaf: a pointed oval blade with a midrib
+          const perp = rot(p.dir, Math.PI / 2);
+          const w = p.len * 0.32;
+          const m1 = add(p.base, scale(p.dir, p.len * 0.45));
+          g.poly([
+            p.base.x, p.base.y,
+            m1.x + perp.x * w, m1.y + perp.y * w,
+            p.tip.x, p.tip.y,
+            m1.x - perp.x * w, m1.y - perp.y * w,
+          ]).fill({ color, alpha });
           g.moveTo(p.base.x, p.base.y)
-            .lineTo(tip.x, tip.y)
-            .stroke({ width: 1.6, color, alpha });
+            .lineTo(p.tip.x, p.tip.y)
+            .stroke({ width: 0.8, color: 0x1c3318, alpha: alpha * 0.7 });
+        } else {
+          for (const spread of [-0.38, 0, 0.38]) {
+            const d = rot(p.dir, spread);
+            const tip = add(p.base, scale(d, p.len * (spread === 0 ? 1 : 0.8)));
+            g.moveTo(p.base.x, p.base.y)
+              .lineTo(tip.x, tip.y)
+              .stroke({ width: 1.6, color, alpha });
+          }
         }
         break;
       }
       case 'cone': {
         const frac = Math.min(p.charge / f.repro.coneEnergy, 1);
         const armed = p.armedAt >= 0;
-        const w = 2.5 + frac * 2.5;
-        const l = 4 + frac * 5;
-        const perp = rot(p.dir, Math.PI / 2);
-        const tip = add(p.base, scale(p.dir, l));
-        g.poly([
-          p.base.x + perp.x * w, p.base.y + perp.y * w,
-          tip.x, tip.y,
-          p.base.x - perp.x * w, p.base.y - perp.y * w,
-        ]).fill({ color: armed ? c.coneArmed : c.cone });
-        if (!armed && frac > 0.02) {
-          // charge arc around the ripening cone
-          g.moveTo(p.base.x, p.base.y - 7)
-            .arc(p.base.x, p.base.y, 7, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
-            .stroke({ width: 1.4, color: c.coneArmed, alpha: 0.7 });
+        if (f.render.repro === 'flower') {
+          const at = add(p.base, scale(p.dir, 3));
+          if (armed) {
+            // ripe fruit: a glossy orb
+            g.circle(at.x, at.y, 4.6).fill({ color: c.coneArmed });
+            g.circle(at.x - 1.3, at.y - 1.3, 1.3).fill({ color: 0xfff2d9, alpha: 0.85 });
+          } else {
+            // flower: petal rosette blooming with charge
+            const r = 1.6 + frac * 3.2;
+            for (let k = 0; k < 5; k++) {
+              const a = (k / 5) * Math.PI * 2;
+              g.circle(at.x + Math.cos(a) * r, at.y + Math.sin(a) * r, r * 0.75).fill({
+                color: c.cone,
+                alpha: 0.9,
+              });
+            }
+            g.circle(at.x, at.y, r * 0.55).fill({ color: c.heartCore });
+          }
+        } else {
+          const w = 2.5 + frac * 2.5;
+          const l = 4 + frac * 5;
+          const perp = rot(p.dir, Math.PI / 2);
+          const tip = add(p.base, scale(p.dir, l));
+          g.poly([
+            p.base.x + perp.x * w, p.base.y + perp.y * w,
+            tip.x, tip.y,
+            p.base.x - perp.x * w, p.base.y - perp.y * w,
+          ]).fill({ color: armed ? c.coneArmed : c.cone });
+          if (!armed && frac > 0.02) {
+            // charge arc around the ripening cone
+            g.moveTo(p.base.x, p.base.y - 7)
+              .arc(p.base.x, p.base.y, 7, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
+              .stroke({ width: 1.4, color: c.coneArmed, alpha: 0.7 });
+          }
         }
         break;
       }
       case 'heart': {
+        if (f.render.heart === 'bulb') {
+          // Anthophyta heartseed: a swollen tuber-bulb, glow = stored energy
+          const up = plant.up;
+          const at = add(p.base, scale(up, 5));
+          if (p.dead) {
+            g.circle(at.x, at.y, 8).fill({ color: HUSK_HEART, alpha: 0.75 });
+            break;
+          }
+          const ratio = Math.max(0, Math.min(1, plant.energy / plant.capacity));
+          const body = dmg > 0.05 ? lerpColor(c.heart, WOUND, dmg * 0.7) : c.heart;
+          g.circle(at.x, at.y, 8).fill({ color: body });
+          g.circle(at.x, at.y, 8).stroke({ width: 1.2, color: 0x241a20, alpha: 0.6 });
+          const glow = starving ? c.leafStarving : c.heartCore;
+          g.circle(at.x, at.y, 2 + ratio * 4.5).fill({ color: glow, alpha: 0.4 + ratio * 0.5 });
+          break;
+        }
         // The heartseed is a pinecone sitting on the rock, oriented along the
         // plant's up vector. Energy = the cone's inner glow filling upward.
         const up = plant.up;

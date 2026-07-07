@@ -1,8 +1,8 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import { createWorld, stepWorld, spawnDebris, setPing } from './sim/world';
+import { createWorld, stepWorld, spawnDebris, setPing, placeLure } from './sim/world';
 import { pruneAlongPath, fireCone } from './sim/plant';
 import { setEventSink } from './sim/events';
-import type { Asteroid, Plant, World } from './sim/types';
+import type { Asteroid, FactionId, MapDef, Plant, World } from './sim/types';
 import { add, dist, norm, scale, sub, fromAngle, type Vec2 } from './sim/vec';
 import { MAPS, DEFAULT_MAP } from './content/maps/index';
 import { TUNING } from './content/tuning';
@@ -13,6 +13,7 @@ import { PlantView } from './render/plantView';
 import { DebrisView } from './render/debrisView';
 import { PruneView } from './render/pruneView';
 import { FxView } from './render/fxView';
+import { FaunaView } from './render/faunaView';
 import { SeedView } from './render/seedView';
 import { PingView } from './render/pingView';
 import { Camera } from './ui/camera';
@@ -36,7 +37,15 @@ async function boot(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const urlSeed = params.get('seed');
   let seed = urlSeed ? Number(urlSeed) >>> 0 : 1337;
-  const map = MAPS[params.get('map') ?? DEFAULT_MAP] ?? MAPS[DEFAULT_MAP];
+  const baseMap = MAPS[params.get('map') ?? DEFAULT_MAP] ?? MAPS[DEFAULT_MAP];
+  // ?faction= / ?ai= override colony factions for matchup testing (M7)
+  const map: MapDef = JSON.parse(JSON.stringify(baseMap));
+  const pf = params.get('faction') as FactionId | null;
+  const af = params.get('ai') as FactionId | null;
+  for (const c of map.colonies) {
+    if (pf && c.player && (pf === 'pinophyta' || pf === 'anthophyta')) c.faction = pf;
+    if (af && !c.player && (af === 'pinophyta' || af === 'anthophyta')) c.faction = af;
+  }
   let world: World = createWorld(map, seed);
   setEventSink(world.events);
   let playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
@@ -49,6 +58,7 @@ async function boot(): Promise<void> {
   const debrisView = new DebrisView();
   const pruneView = new PruneView();
   const fxView = new FxView();
+  const faunaView = new FaunaView();
   const seedView = new SeedView();
   const pingView = new PingView();
   const aimG = new Graphics();
@@ -57,6 +67,7 @@ async function boot(): Promise<void> {
     plantView.container,
     debrisView.g,
     seedView.g,
+    faunaView.g,
     fxView.g,
     pingView.g,
     pruneView.g,
@@ -70,6 +81,7 @@ async function boot(): Promise<void> {
   let pruneMode = false;
   let pingMode = false;
   let blessMode = false;
+  let lureMode = false;
   let prunePath: Vec2[] | null = null;
   let draggedRock: Asteroid | null = null;
   let aiming: { plant: Plant; coneId: number; pos: Vec2 } | null = null;
@@ -147,6 +159,12 @@ async function boot(): Promise<void> {
         pingBtn.classList.remove('active');
         return;
       }
+      if (lureMode) {
+        placeLure(world, playerColonyId, worldPos);
+        lureMode = false;
+        lureBtn.classList.remove('active');
+        return;
+      }
       if (blessMode) {
         const hit = pickPlant(world, worldPos, 30 / camera.zoom);
         const plant = world.plants.find((p) => p.id === hit);
@@ -195,6 +213,19 @@ async function boot(): Promise<void> {
     pingBtn.classList.remove('active');
     blessBtn.classList.toggle('active', blessMode);
   });
+  const lureBtn = document.createElement('button');
+  lureBtn.textContent = '✿ lure 2⬡';
+  lureBtn.addEventListener('click', () => {
+    lureMode = !lureMode;
+    pruneMode = false;
+    pingMode = false;
+    blessMode = false;
+    prunePath = null;
+    pruneBtn.classList.remove('active');
+    pingBtn.classList.remove('active');
+    blessBtn.classList.remove('active');
+    lureBtn.classList.toggle('active', lureMode);
+  });
   const traitPanel = new TraitPanel(
     () => world,
     () => playerColonyId,
@@ -203,6 +234,7 @@ async function boot(): Promise<void> {
   traitBtn.textContent = '⬡ evolve';
   traitBtn.addEventListener('click', () => traitPanel.toggle());
   actionBar.appendChild(traitBtn);
+  actionBar.appendChild(lureBtn);
   actionBar.appendChild(blessBtn);
   actionBar.appendChild(pingBtn);
   actionBar.appendChild(pruneBtn);
@@ -357,6 +389,7 @@ async function boot(): Promise<void> {
     plantView.update(world);
     debrisView.update(world);
     seedView.update(world);
+    faunaView.update(world);
     pingView.update(world);
     pruneView.update(prunePath);
 

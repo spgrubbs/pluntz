@@ -41,8 +41,9 @@ describe('death & husks', () => {
     expect(plant.totalLeaves).toBe(0);
     expect(plant.alive).toBe(true); // wood holds longer
 
-    // then wood, then the heart
-    for (let i = 0; i < 2600; i++) stepWorld(w, TUNING.simDt);
+    // then wood, then the heart — slower than you'd think: co-rock siblings
+    // drip energy through the substrate network, pausing the decay
+    for (let i = 0; i < 4200; i++) stepWorld(w, TUNING.simDt);
     expect(plant.alive).toBe(false);
   });
 

@@ -50,6 +50,7 @@ export function createPlant(
     shade: 0,
     group: 0,
   };
+  const rng = makeRng((world.seed ^ ((world.nextId + 1) * 0x9e3779b9)) >>> 0);
   return {
     id: world.nextId++,
     alive: true,
@@ -62,6 +63,7 @@ export function createPlant(
     parts: [heart],
     buds: [],
     budCursor: 0,
+    vineSide: rng.next() < 0.5 ? -1 : 1,
     energy: f.energy.heartInitial,
     capacity: f.energy.capBase,
     rootCount: 0,
@@ -71,7 +73,7 @@ export function createPlant(
     age: 0,
     blessedUntil: 0,
     deathScored: false,
-    rng: makeRng((world.seed ^ (world.nextId * 0x9e3779b9)) >>> 0),
+    rng,
     version: 0,
     lastIncome: 0,
     lastUpkeep: 0,
@@ -170,8 +172,21 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     if (p.dead || p.kind !== 'cone') continue;
     const R = f.repro;
     if (p.charge < R.coneEnergy) {
+      // Anthophila pollination: a mote near the flower speeds its bloom
+      let pollinate = 1;
+      if (f.repro.style === 'fauna') {
+        const cx = plant.astPos.x + p.tip.x;
+        const cy = plant.astPos.y + p.tip.y;
+        for (const fn of world.fauna) {
+          if (fn.kind !== 'anthophila') continue;
+          if (Math.hypot(fn.pos.x - cx, fn.pos.y - cy) < 50) {
+            pollinate = 1.8;
+            break;
+          }
+        }
+      }
       const take = Math.min(
-        R.chargeRate * mods.chargeRate * dt,
+        R.chargeRate * mods.chargeRate * pollinate * dt,
         Math.max(plant.energy - f.energy.reserve, 0),
         R.coneEnergy - p.charge,
       );
@@ -184,6 +199,8 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
         plant.version++;
       }
     } else if (p.armedAt >= 0) {
+      // fauna-style fruit waits for a Frugivora; the timer is only the
+      // self-drop fallback, so it's forgiving
       const delay = colony && !colony.isPlayer ? R.aiAutoFire : R.armedAutoFire;
       if (world.time - p.armedAt > delay) fireCone(world, plant, p.id, null);
     }
@@ -586,12 +603,26 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): void
   const tip = plant.parts[plant.trunkTip];
   const prevDir = plant.trunkSegs === 0 ? plant.up : tip.dir;
   const noise = fromAngle(plant.rng.range(0, Math.PI * 2));
-  const dir = norm(
+  // vines hug the surface: bias along the local tangent, wrapping vineSide-ward
+  const radial = norm(tip.tip.x === 0 && tip.tip.y === 0 ? plant.up : tip.tip);
+  const tangent = rot(radial, (plant.vineSide || 1) * (Math.PI / 2));
+  let dir = norm(
     add(
       add(scale(prevDir, g.wPrevDir), scale(plant.up, g.wUp)),
-      add(scale(toSun, g.wSun), scale(noise, g.wNoise)),
+      add(
+        add(scale(toSun, g.wSun), scale(noise, g.wNoise)),
+        scale(tangent, g.wTangent),
+      ),
     ),
   );
+  if (g.style === 'vine') {
+    // keep runners from burrowing: reflect the radial-inward component away
+    const tipR = Math.hypot(tip.tip.x, tip.tip.y);
+    const anchorR = Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y);
+    if (tipR < anchorR + 6 && dot(dir, radial) < 0.05) {
+      dir = norm(add(dir, scale(radial, 0.4)));
+    }
+  }
   const len = g.trunkSegLen * (1 - Math.min(plant.trunkSegs * g.trunkTaper * 0.1, 0.45));
   const base = tip.tip;
   const depth = plant.trunkSegs + 1;

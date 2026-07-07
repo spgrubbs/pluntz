@@ -2,7 +2,7 @@ import type { Vec2 } from './vec';
 import type { RNG } from './rng';
 import type { ShadeLevel } from './light';
 
-export type FactionId = 'pinophyta';
+export type FactionId = 'pinophyta' | 'anthophyta';
 
 export type PartKind = 'heart' | 'root' | 'stem' | 'leaf' | 'cone';
 
@@ -77,6 +77,7 @@ export interface Plant {
   parts: Part[];
   buds: BranchBud[];
   budCursor: number;
+  vineSide: number; // vine factions: which way the runner wraps (-1/1)
   energy: number;
   capacity: number;
   rootCount: number;
@@ -144,6 +145,24 @@ export interface Ping {
   expires: number;
 }
 
+export type FaunaKind = 'frugivora' | 'phytophaga' | 'anthophila';
+
+/** Neutral critters: birds that carry fruit-seeds, grazers, pollinator motes. */
+export interface Fauna {
+  id: number;
+  kind: FaunaKind;
+  pos: Vec2;
+  vel: Vec2;
+  state: 'wander' | 'toFruit' | 'deliver' | 'graze';
+  targetPlant: number; // plant id, -1 none
+  targetPart: number; // part id, -1 none
+  targetAst: number; // asteroid id, -1 none
+  carryColony: number; // colony whose seed is being carried, -1 none
+  carryFaction: FactionId | null;
+  waypoint: Vec2;
+  timer: number;
+}
+
 /** A drifting rock: the ambient hazard. Shatters on asteroids and plants. */
 export interface Debris {
   id: number;
@@ -167,7 +186,9 @@ export interface World {
   colonies: Colony[];
   seeds: Seed[];
   debris: Debris[];
+  fauna: Fauna[];
   ping: Ping | null;
+  lure: Ping | null; // fauna-attracting scent (the Lure verb)
   events: SimEvent[]; // drained by the renderer every frame
   nextId: number;
   debrisPerMin: number;
@@ -191,6 +212,7 @@ export interface MapDef {
   height: number;
   sun: { angleDeg: number; cycle: boolean; cyclePeriodSec: number };
   debris?: { perMin: number };
+  fauna?: { frugivora: number; phytophaga: number; anthophila: number };
   roundSec?: number;
   canopyWin?: { share: number; holdSec: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
