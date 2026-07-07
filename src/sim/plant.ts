@@ -13,6 +13,7 @@ import {
   type CanopySeg,
 } from './light';
 import { emit } from './events';
+import { colonyMods, type Mods } from './stats';
 
 const EMPTY_SEGS: CanopySeg[] = [];
 
@@ -68,6 +69,8 @@ export function createPlant(
     trunkTip: 0,
     growthCooldown: 0,
     age: 0,
+    blessedUntil: 0,
+    deathScored: false,
     rng: makeRng((world.seed ^ (world.nextId * 0x9e3779b9)) >>> 0),
     version: 0,
     lastIncome: 0,
@@ -88,14 +91,18 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   plant.astPos = { ...asteroid.pos };
   plant.age += dt;
 
+  const colony = world.colonies.find((c) => c.id === plant.colonyId);
+  const mods = colonyMods(colony);
+  const blessed = world.time < plant.blessedUntil;
+
   // --- Aging: bark hardening, natural needle drop ----------------------------
   for (const p of plant.parts) {
     if (p.dead) continue;
     p.age += dt;
-    if (p.kind === 'stem' && !p.hardened && p.age > f.life.hardenAge) {
+    if (p.kind === 'stem' && !p.hardened && p.age > f.life.hardenAge * mods.hardenAgeMult) {
       p.hardened = true;
-      p.hp += f.life.hardenBonus;
-      p.maxHp += f.life.hardenBonus;
+      p.hp += f.life.hardenBonus + mods.hardenBonusAdd;
+      p.maxHp += f.life.hardenBonus + mods.hardenBonusAdd;
     }
     if (p.maxAge > 0 && p.age > p.maxAge) killPart(plant, p.id); // needle drops, slot reopens
   }
@@ -128,9 +135,20 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     if (shade === 0) litLeaves++;
     else if (shade === 1) canopyLeaves++;
     else shadowLeaves++;
-    const shadeMult = shade === 0 ? 1 : shade === 1 ? f.energy.canopyShade : f.energy.shadeFloor;
+    const shadeMult =
+      shade === 0
+        ? 1
+        : shade === 1
+          ? (mods.canopyShadeOverride ?? f.energy.canopyShade)
+          : (mods.shadeFloorOverride ?? f.energy.shadeFloor);
     const angleEff = Math.max(Math.abs(dot(p.dir, toSun)), f.energy.minAngleEff);
-    income += f.energy.leafIncome * angleEff * shadeMult * world.sunFactor;
+    income +=
+      f.energy.leafIncome *
+      angleEff *
+      shadeMult *
+      world.sunFactor *
+      mods.leafIncome *
+      (blessed ? TUNING.verbs.blessIncomeMult : 1);
   }
   plant.lastIncome = income;
   plant.lastUpkeep = upkeep;
@@ -148,13 +166,12 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   }
 
   // --- Cones: charge, arm, and eventually self-fire ---------------------------
-  const colony = world.colonies.find((c) => c.id === plant.colonyId);
   for (const p of plant.parts) {
     if (p.dead || p.kind !== 'cone') continue;
     const R = f.repro;
     if (p.charge < R.coneEnergy) {
       const take = Math.min(
-        R.chargeRate * dt,
+        R.chargeRate * mods.chargeRate * dt,
         Math.max(plant.energy - f.energy.reserve, 0),
         R.coneEnergy - p.charge,
       );
@@ -173,15 +190,21 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   }
 
   // --- Growth: one action per cooldown window -------------------------------
+  const cooldown = f.growth.actionCooldown * (blessed ? TUNING.verbs.blessCooldownMult : 1);
   plant.growthCooldown -= dt;
   if (plant.growthCooldown <= 0) {
-    if (tryGrow(plant, f, toSun)) {
-      plant.growthCooldown = f.growth.actionCooldown;
+    if (tryGrow(plant, f, toSun, mods)) {
+      plant.growthCooldown = cooldown;
       plant.version++;
     } else {
-      plant.growthCooldown = f.growth.actionCooldown * 0.5; // re-check soon
+      plant.growthCooldown = cooldown * 0.5; // re-check soon
     }
   }
+}
+
+/** The trunk-segment goal after colony traits/instincts. */
+export function trunkTargetFor(f: FactionDef, mods: Mods): number {
+  return Math.max(4, Math.round(f.growth.trunkTarget * mods.trunkTargetMult) + mods.trunkTargetAdd);
 }
 
 /**
@@ -202,41 +225,41 @@ export function aliveConeCount(plant: Plant): number {
 }
 
 /** Attempt exactly one growth action. Returns true if something grew. */
-function tryGrow(plant: Plant, f: FactionDef, toSun: Vec2): boolean {
+function tryGrow(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): boolean {
   const g = f.growth;
   const spendable = plant.energy - f.energy.reserve;
 
   // 1. Anchor first: roots before anything else.
   if (plant.rootCount < g.rootMax) {
     if (spendable < g.rootCost) return false;
-    addRoot(plant, f);
+    addRoot(plant, f, mods);
     return true;
   }
 
   // 2. Photosynthesis before architecture: fill every open needle slot first,
   //    so income always scales with structure and the plant can't bankrupt
   //    itself building a leafless trunk.
-  if (leafDeficit(plant, f) > 0 && spendable >= g.leafCost) return addLeaf(plant, f);
+  if (leafDeficit(plant, f) > 0 && spendable >= g.leafCost) return addLeaf(plant, f, mods);
 
   // 3. Extend the trunk (spawns branch buds on schedule).
-  if (plant.trunkSegs < g.trunkTarget && spendable >= g.stemCost) {
-    extendTrunk(plant, f, toSun);
+  if (plant.trunkSegs < trunkTargetFor(f, mods) && spendable >= g.stemCost) {
+    extendTrunk(plant, f, toSun, mods);
     return true;
   }
 
   // 4. Extend a side branch.
-  if (spendable >= g.stemCost && extendBranch(plant, f)) return true;
+  if (spendable >= g.stemCost && extendBranch(plant, f, mods)) return true;
 
   // 5. Bud seed cones on the highest free tips.
   if (aliveConeCount(plant) < f.repro.coneMax && spendable >= f.repro.coneCost) {
-    return growCone(plant, f);
+    return growCone(plant, f, mods);
   }
 
   return false;
 }
 
 /** Bud a cone on one of the highest stem tips (trunk top or branch ends). */
-function growCone(plant: Plant, f: FactionDef): boolean {
+function growCone(plant: Plant, f: FactionDef, mods: Mods): boolean {
   const hasChildStem = new Set<number>();
   for (const p of plant.parts) {
     if (!p.dead && (p.kind === 'stem' || p.kind === 'cone')) hasChildStem.add(p.parent);
@@ -246,7 +269,7 @@ function growCone(plant: Plant, f: FactionDef): boolean {
     .sort((a, b) => (b.base.x ** 2 + b.base.y ** 2) - (a.base.x ** 2 + a.base.y ** 2));
   if (cands.length === 0) return false;
   const stem = cands[plant.rng.int(Math.min(3, cands.length))];
-  const hp = rollHp(plant, f, 'cone');
+  const hp = rollHp(plant, f, 'cone', mods);
   pushPart(plant, {
     kind: 'cone',
     parent: stem.id,
@@ -285,8 +308,10 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
   if (!plant.alive || cone.dead || cone.kind !== 'cone' || cone.charge < R.coneEnergy) {
     return false;
   }
+  const mods = colonyMods(world.colonies.find((c) => c.id === plant.colonyId));
+  const range = R.seedRange * mods.seedRange;
   const from = add(plant.astPos, cone.tip);
-  const aim = dir ?? autoAim(world, plant, from, R.seedRange);
+  const aim = dir ?? autoAim(world, plant, from, range);
   if (!aim) return false; // hold fire until something is in range (or the player aims)
 
   world.seeds.push({
@@ -296,7 +321,7 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
     pos: { ...from },
     vel: scale(norm(aim), R.seedSpeed),
     age: 0,
-    maxAge: R.seedRange / R.seedSpeed,
+    maxAge: range / R.seedSpeed,
   });
   emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });
   killPart(plant, coneId); // spent cone drops; the slot reopens
@@ -374,9 +399,9 @@ export function leafDeficit(plant: Plant, f: FactionDef): number {
 }
 
 /** Roll hp with per-part variance so damage cascades stagger naturally. */
-function rollHp(plant: Plant, f: FactionDef, kind: PartKind): number {
+function rollHp(plant: Plant, f: FactionDef, kind: PartKind, mods: Mods): number {
   const v = f.life.hpVariance;
-  return f.life.hp[kind] * plant.rng.range(1 - v, 1 + v);
+  return f.life.hp[kind] * plant.rng.range(1 - v, 1 + v) * mods.partHp;
 }
 
 /**
@@ -524,12 +549,12 @@ function pushPart(plant: Plant, part: Omit<Part, 'id'>): Part {
   return full;
 }
 
-function addRoot(plant: Plant, f: FactionDef): void {
+function addRoot(plant: Plant, f: FactionDef, mods: Mods): void {
   const g = f.growth;
   const heart = plant.parts[0];
   const side = plant.rootCount === 0 ? -1 : 1;
   const dir = norm(rot(scale(plant.up, -1), side * plant.rng.range(15, 30) * DEG));
-  const hp = rollHp(plant, f, 'root');
+  const hp = rollHp(plant, f, 'root', mods);
   pushPart(plant, {
     kind: 'root',
     parent: 0,
@@ -556,7 +581,7 @@ function addRoot(plant: Plant, f: FactionDef): void {
   plant.energy -= g.rootCost;
 }
 
-function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2): void {
+function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): void {
   const g = f.growth;
   const tip = plant.parts[plant.trunkTip];
   const prevDir = plant.trunkSegs === 0 ? plant.up : tip.dir;
@@ -570,7 +595,7 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2): void {
   const len = g.trunkSegLen * (1 - Math.min(plant.trunkSegs * g.trunkTaper * 0.1, 0.45));
   const base = tip.tip;
   const depth = plant.trunkSegs + 1;
-  const hp = rollHp(plant, f, 'stem');
+  const hp = rollHp(plant, f, 'stem', mods);
   const part = pushPart(plant, {
     kind: 'stem',
     parent: plant.trunkTip,
@@ -599,14 +624,15 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2): void {
 
   // Branch buds on schedule: lower branches get more steps (spire silhouette).
   if (depth >= g.branchStartDepth && (depth - g.branchStartDepth) % g.branchEvery === 0) {
-    const maxSteps = Math.max(1, Math.min(4, Math.round((g.trunkTarget - depth) / 3)));
+    const maxSteps =
+      Math.max(1, Math.min(4, Math.round((g.trunkTarget - depth) / 3))) + mods.branchStepsAdd;
     for (const side of [-1, 1]) {
       plant.buds.push({ fromPart: part.id, lastPart: -1, side, steps: 0, maxSteps });
     }
   }
 }
 
-function extendBranch(plant: Plant, f: FactionDef): boolean {
+function extendBranch(plant: Plant, f: FactionDef, mods: Mods): boolean {
   const g = f.growth;
   const live = plant.buds.filter((b) => b.steps < b.maxSteps);
   if (live.length === 0) return false;
@@ -623,7 +649,7 @@ function extendBranch(plant: Plant, f: FactionDef): boolean {
     dir = norm(add(from.dir, scale(plant.up, g.branchCurl)));
   }
   const len = g.branchSegLen * (1 - bud.steps * 0.15);
-  const hp = rollHp(plant, f, 'stem');
+  const hp = rollHp(plant, f, 'stem', mods);
   const part = pushPart(plant, {
     kind: 'stem',
     parent: from.id,
@@ -654,7 +680,7 @@ function extendBranch(plant: Plant, f: FactionDef): boolean {
   return true;
 }
 
-function addLeaf(plant: Plant, f: FactionDef): boolean {
+function addLeaf(plant: Plant, f: FactionDef, mods: Mods): boolean {
   const g = f.growth;
   // Fill youngest stems first so needles appear where growth is happening.
   for (let i = plant.parts.length - 1; i >= 0; i--) {
@@ -665,7 +691,7 @@ function addLeaf(plant: Plant, f: FactionDef): boolean {
     const base = add(stem.base, scale(stem.dir, stem.len * t));
     const ang = (g.leafAngleDeg + plant.rng.range(-10, 10)) * DEG;
     const dir = norm(rot(stem.dir, side * ang));
-    const hp = rollHp(plant, f, 'leaf');
+    const hp = rollHp(plant, f, 'leaf', mods);
     pushPart(plant, {
       kind: 'leaf',
       parent: stem.id,

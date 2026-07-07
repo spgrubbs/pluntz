@@ -11,6 +11,7 @@ export class Inspector {
   private plantId: number | null = null;
   private builtFor: number | null = null;
   private refs: Record<string, HTMLElement> = {};
+  private world: World | null = null;
 
   show(plantId: number): void {
     this.plantId = plantId;
@@ -24,6 +25,7 @@ export class Inspector {
   }
 
   update(world: World): void {
+    this.world = world;
     if (this.plantId === null) return;
     const plant = world.plants.find((p) => p.id === this.plantId);
     if (!plant) {
@@ -74,7 +76,7 @@ export class Inspector {
   private refresh(plant: Plant): void {
     const f = FACTIONS[plant.faction];
     const r = this.refs;
-    const s = plantStatus(plant);
+    const s = plantStatus(this.world!, plant);
     const net = plant.lastIncome - plant.lastUpkeep;
 
     // aim line: warning trumps intent

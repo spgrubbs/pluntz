@@ -1,6 +1,7 @@
-import type { Plant } from './types';
+import type { Plant, World } from './types';
 import { FACTIONS, type IntentId } from '../content/factions';
-import { leafDeficit, aliveConeCount } from './plant';
+import { leafDeficit, aliveConeCount, trunkTargetFor } from './plant';
+import { colonyMods } from './stats';
 
 export interface PlantStatus {
   intent: IntentId;
@@ -20,9 +21,11 @@ export interface PlantStatus {
  * Derives the plant's current aim from the same state tryGrow() reads, in the
  * same priority order — the inspector reports what the sim will actually do.
  */
-export function plantStatus(plant: Plant): PlantStatus {
+export function plantStatus(world: World, plant: Plant): PlantStatus {
   const f = FACTIONS[plant.faction];
   const g = f.growth;
+  const mods = colonyMods(world.colonies.find((c) => c.id === plant.colonyId));
+  const trunkTarget = trunkTargetFor(f, mods);
   if (!plant.alive) {
     return {
       intent: 'mature',
@@ -30,7 +33,7 @@ export function plantStatus(plant: Plant): PlantStatus {
       warning: 'the colony is dead',
       saving: false,
       trunkSegs: plant.trunkSegs,
-      trunkTarget: g.trunkTarget,
+      trunkTarget,
       budsActive: 0,
       budsDone: plant.buds.length,
       needleSlotsOpen: 0,
@@ -52,9 +55,9 @@ export function plantStatus(plant: Plant): PlantStatus {
     intent = 'needles';
     aim = `sprouting needles — ${deficit} open slot${deficit === 1 ? '' : 's'}`;
     cost = g.leafCost;
-  } else if (plant.trunkSegs < g.trunkTarget) {
+  } else if (plant.trunkSegs < trunkTarget) {
     intent = 'trunk';
-    aim = `raising the trunk toward the sun (${plant.trunkSegs}/${g.trunkTarget})`;
+    aim = `raising the trunk toward the sun (${plant.trunkSegs}/${trunkTarget})`;
     cost = g.stemCost;
   } else if (budsActive > 0) {
     intent = 'branches';
@@ -105,7 +108,7 @@ export function plantStatus(plant: Plant): PlantStatus {
     warning,
     saving,
     trunkSegs: plant.trunkSegs,
-    trunkTarget: g.trunkTarget,
+    trunkTarget,
     budsActive,
     budsDone,
     needleSlotsOpen: deficit,

@@ -82,6 +82,14 @@ export class PlantView {
     for (const plant of world.plants) {
       if (!plant.alive) continue;
       const pal = paletteFor(world, plant);
+      if (world.time < plant.blessedUntil) {
+        const hb = plant.parts[0].base;
+        g.circle(plant.astPos.x + hb.x, plant.astPos.y + hb.y, 16 + pulse * 6).stroke({
+          width: 2,
+          color: pal.heartCore,
+          alpha: 0.3 + pulse * 0.4,
+        });
+      }
       for (const p of plant.parts) {
         if (p.dead || p.kind !== 'cone' || p.armedAt < 0) continue;
         const x = plant.astPos.x + p.tip.x;

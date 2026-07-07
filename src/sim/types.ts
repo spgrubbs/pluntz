@@ -87,6 +87,8 @@ export interface Plant {
   rng: RNG;
   version: number; // bumped on structural change (render rebuild key)
   // per-tick telemetry for the inspector
+  blessedUntil: number; // sim time the Bless buff lapses
+  deathScored: boolean; // rivals were paid essence for this plant's death
   lastIncome: number;
   lastUpkeep: number;
   litLeaves: number;
@@ -118,6 +120,10 @@ export interface Colony {
   faction: FactionId;
   isPlayer: boolean;
   palette: number; // index into the faction's palette list
+  essence: number; // the strategic currency: traits & strong verbs
+  traits: string[]; // owned trait ids (see content/traits.ts)
+  /** Autonomous-policy sliders, both 0..1. */
+  instincts: { expand: number; vertical: number };
 }
 
 /** An airborne seed: ballistic, sprouts where it lands. */
@@ -170,6 +176,12 @@ export interface World {
   sunFactor: number; // 1 normally, ramps down in sudden death
   roundState: 'playing' | 'won' | 'lost';
   endedAt: number; // sim time the round ended, -1 while playing
+  endReason: 'domination' | 'canopy' | '';
+  /** Canopy win condition tracking (when the map defines canopyWin). */
+  canopyWin: { share: number; holdSec: number } | null;
+  canopyHolder: number; // colonyId currently above the share threshold, -1 none
+  canopyHeldSec: number;
+  canopyShares: { colonyId: number; share: number }[];
 }
 
 export interface MapDef {
@@ -180,6 +192,7 @@ export interface MapDef {
   sun: { angleDeg: number; cycle: boolean; cyclePeriodSec: number };
   debris?: { perMin: number };
   roundSec?: number;
+  canopyWin?: { share: number; holdSec: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
   colonies: { name: string; faction: FactionId; player?: boolean; palette?: number }[];
   spawns: { asteroid: number; anchorDeg: number; colony: number }[];

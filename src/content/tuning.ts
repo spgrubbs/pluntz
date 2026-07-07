@@ -32,6 +32,20 @@ export const TUNING = {
     substrate: { baseArc: 30, perPart: 0.5, maxArc: 85 },
   },
 
+  verbs: {
+    blessCost: 3, // essence
+    blessDuration: 25, // seconds of growth surge
+    blessIncomeMult: 1.5,
+    blessCooldownMult: 0.55,
+  },
+
+  essence: {
+    survivalInterval: 45, // seconds between +1 survival ticks
+    newRockBonus: 3, // first sprout on a rock the colony didn't hold
+    rivalDeathBonus: 2, // paid to each rival when a plant dies
+    starting: 2,
+  },
+
   debris: {
     radius: [5, 13] as [number, number],
     ambientSpeed: [16, 42] as [number, number],

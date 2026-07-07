@@ -142,6 +142,82 @@
       .banner .btn-row {
         justify-content: center;
       }
+      .traitpanel {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(340px, calc(100vw - 24px));
+        max-height: 74vh;
+        overflow-y: auto;
+        background: rgba(6, 9, 18, 0.96);
+        border: 1px solid #2a3550;
+        border-radius: 12px;
+        padding: 12px 14px;
+        display: none;
+        font-size: 12px;
+      }
+      .traitpanel.open {
+        display: block;
+      }
+      .tp-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #7fe8b0;
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+      }
+      .tp-head b {
+        margin-left: auto;
+        color: #ffd257;
+        font-size: 14px;
+      }
+      .tp-head .tp-close {
+        padding: 2px 9px;
+        font-size: 15px;
+      }
+      .tp-sliders label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #8fa0bd;
+        margin: 6px 0;
+        white-space: nowrap;
+      }
+      .tp-sliders input {
+        flex: 1;
+      }
+      .tp-trait {
+        border: 1px solid #223052;
+        border-radius: 8px;
+        padding: 7px 10px;
+        margin: 7px 0;
+        opacity: 0.55;
+      }
+      .tp-trait.afford {
+        opacity: 1;
+        cursor: pointer;
+        border-color: #3f8a67;
+      }
+      .tp-trait.owned {
+        opacity: 0.9;
+        border-color: #2b5c46;
+        background: rgba(43, 92, 70, 0.15);
+      }
+      .tp-trait-top {
+        display: flex;
+        justify-content: space-between;
+        color: #dce6f5;
+      }
+      .tp-trait-top span {
+        color: #ffd257;
+      }
+      .tp-trait p {
+        margin: 4px 0 0;
+        color: #8fa0bd;
+        line-height: 1.4;
+      }
       .actionbar {
         position: absolute;
         right: 10px;

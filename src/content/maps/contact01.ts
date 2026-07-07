@@ -12,6 +12,7 @@ export const CONTACT01: MapDef = {
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 300 },
   debris: { perMin: 2 },
   roundSec: 600,
+  canopyWin: { share: 0.55, holdSec: 45 },
   asteroids: [
     { x: -820, y: 200, r: 90 }, // player home
     { x: 820, y: -200, r: 90 }, // rival home

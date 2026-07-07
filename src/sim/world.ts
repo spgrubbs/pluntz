@@ -5,8 +5,11 @@ import type { Asteroid, Debris, FactionId, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
 import { FACTIONS } from '../content/factions';
 import { createPlant, stepPlant, damagePart } from './plant';
-import { canopyCross, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
+import { canopyCross, isLit, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
 import { emit, setEventSink } from './events';
+import { colonyMods, buyTrait } from './stats';
+import { substrateHalfAngle } from './plant';
+import { AI_TRAIT_ORDER } from '../content/traits';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
   const rng = makeRng(seed);
@@ -49,6 +52,11 @@ export function createWorld(map: MapDef, seed: number): World {
     sunFactor: 1,
     roundState: 'playing',
     endedAt: -1,
+    endReason: '',
+    canopyHolder: -1,
+    canopyHeldSec: 0,
+    canopyShares: [],
+    canopyWin: map.canopyWin ?? null,
   };
   for (const def of map.asteroids) {
     const ast: Asteroid = {
@@ -67,6 +75,9 @@ export function createWorld(map: MapDef, seed: number): World {
       faction: c.faction,
       isPlayer: c.player ?? false,
       palette: c.palette ?? 0,
+      essence: TUNING.essence.starting,
+      traits: [],
+      instincts: { expand: 0.5, vertical: 0.5 },
     });
   }
   for (const s of map.spawns) {
@@ -94,9 +105,14 @@ export function sproutAt(
     const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
     if (dist(anchor, other) < R.minSpacing) return false;
   }
+  const hadRock = world.plants.some(
+    (pl) => pl.alive && pl.colonyId === colonyId && pl.asteroidId === ast.id,
+  );
   const plant = createPlant(world, ast, angleRad, faction, colonyId);
-  plant.energy = R.seedStartEnergy;
+  const colony = world.colonies.find((c) => c.id === colonyId);
+  plant.energy = R.seedStartEnergy + colonyMods(colony).seedlingEnergyAdd;
   world.plants.push(plant);
+  if (!hadRock && colony) colony.essence += TUNING.essence.newRockBonus;
   emit({ type: 'sprout', x: anchor.x, y: anchor.y, faction });
   return true;
 }
@@ -149,6 +165,22 @@ function stepSeeds(world: World, dt: number): void {
           y: at.y,
           faction: s.faction,
         });
+        // Volatile Seeds: the landing sears nearby rival growth either way
+        const mods = colonyMods(world.colonies.find((c) => c.id === s.colonyId));
+        if (mods.volatileSeeds) {
+          emit({ type: 'shatter', x: at.x, y: at.y, power: 10 });
+          for (const plant of world.plants) {
+            if (!plant.alive || plant.colonyId === s.colonyId) continue;
+            if (dist(at, plant.astPos) > 320) continue;
+            for (const p of plant.parts) {
+              if (p.dead) continue;
+              const a = add(plant.astPos, p.base);
+              const b = add(plant.astPos, p.tip);
+              if (distToSegment(at, a, b) < 34) damagePart(plant, p.id, 20);
+              if (!plant.alive) break;
+            }
+          }
+        }
         world.seeds.splice(i, 1);
         break;
       }
@@ -204,7 +236,105 @@ export function stepWorld(world: World, dt: number): void {
   stepSeeds(world, dt);
   stepDebris(world, dt);
   if (world.tick % 5 === 0) applyContactDamage(world, dt * 5);
-  if (world.tick % 10 === 0) checkRoundEnd(world);
+  stepEssence(world);
+  if (world.tick % 10 === 0) {
+    stepCanopyControl(world, dt * 10);
+    stepAiStrategy(world);
+    checkRoundEnd(world);
+  }
+}
+
+/** Essence economy: survival ticks, deaths paid out to rivals. */
+function stepEssence(world: World): void {
+  if (world.roundState !== 'playing') return;
+  const E = TUNING.essence;
+  if (world.tick % Math.round(E.survivalInterval / TUNING.simDt) === 0 && world.tick > 0) {
+    for (const c of world.colonies) {
+      if (world.plants.some((p) => p.alive && p.colonyId === c.id)) c.essence += 1;
+    }
+  }
+  for (const p of world.plants) {
+    if (p.alive || p.deathScored) continue;
+    p.deathScored = true;
+    for (const c of world.colonies) {
+      if (c.id !== p.colonyId) c.essence += E.rivalDeathBonus;
+    }
+  }
+}
+
+/** AI colonies buy traits down their faction's scripted order. */
+function stepAiStrategy(world: World): void {
+  for (const c of world.colonies) {
+    if (c.isPlayer) continue;
+    for (const id of AI_TRAIT_ORDER[c.faction] ?? []) {
+      if (!c.traits.includes(id)) {
+        buyTrait(world, c.id, id); // no-op when unaffordable
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Canopy control: sample the lit surface of every rock; a sample belongs to
+ * a colony when it falls inside one of its plants' substrate arcs. Holding
+ * more than the threshold share for holdSec wins the round.
+ */
+export function computeCanopyControl(world: World): Map<number, number> {
+  const toSun = fromAngle(world.sun.angle);
+  const counts = new Map<number, number>();
+  let litTotal = 0;
+  for (const ast of world.asteroids) {
+    const residents = world.plants.filter((p) => p.alive && p.asteroidId === ast.id);
+    const n = Math.max(8, Math.round((Math.PI * 2 * ast.radius) / 45));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const point = add(ast.pos, scale(fromAngle(a), ast.radius + 6));
+      if (!isLit(point, toSun, world.asteroids)) continue;
+      litTotal++;
+      let bestColony = -1;
+      let bestGap = Infinity;
+      for (const p of residents) {
+        let gap = Math.abs(a - p.anchorAngle) % (Math.PI * 2);
+        if (gap > Math.PI) gap = Math.PI * 2 - gap;
+        if (gap < substrateHalfAngle(p) && gap < bestGap) {
+          bestGap = gap;
+          bestColony = p.colonyId;
+        }
+      }
+      if (bestColony >= 0) counts.set(bestColony, (counts.get(bestColony) ?? 0) + 1);
+    }
+  }
+  const shares = new Map<number, number>();
+  for (const c of world.colonies) {
+    shares.set(c.id, litTotal > 0 ? (counts.get(c.id) ?? 0) / litTotal : 0);
+  }
+  return shares;
+}
+
+function stepCanopyControl(world: World, interval: number): void {
+  if (!world.canopyWin || world.roundState !== 'playing') return;
+  const shares = computeCanopyControl(world);
+  world.canopyShares = [...shares.entries()].map(([colonyId, share]) => ({
+    colonyId,
+    share,
+  }));
+  let holder = -1;
+  for (const [colonyId, share] of shares) {
+    if (share >= world.canopyWin.share) holder = colonyId;
+  }
+  if (holder !== world.canopyHolder) {
+    world.canopyHolder = holder;
+    world.canopyHeldSec = 0;
+  } else if (holder >= 0) {
+    world.canopyHeldSec += interval;
+    if (world.canopyHeldSec >= world.canopyWin.holdSec) {
+      const isPlayer = world.colonies.find((c) => c.id === holder)?.isPlayer ?? false;
+      world.roundState = isPlayer ? 'won' : 'lost';
+      world.endReason = 'canopy';
+      world.endedAt = world.time;
+    }
+  }
 }
 
 /** Approximate shortest distance between two short segments. */
@@ -232,6 +362,9 @@ const CONTACT_DPS: Record<string, number> = {
  */
 function applyContactDamage(world: World, dt: number): void {
   const plants = world.plants;
+  const modsByColony = new Map(
+    world.colonies.map((c) => [c.id, colonyMods(c)] as const),
+  );
   for (let i = 0; i < plants.length; i++) {
     const A = plants[i];
     if (!A.alive) continue;
@@ -240,6 +373,10 @@ function applyContactDamage(world: World, dt: number): void {
       if (!B.alive || B.colonyId === A.colonyId) continue;
       // broadphase: gardens can only touch if their rocks are close
       if (dist(A.astPos, B.astPos) > 620) continue;
+      const mA = modsByColony.get(A.colonyId);
+      const mB = modsByColony.get(B.colonyId);
+      const dmgToA = dt * (mB?.contactDealt ?? 1) * (mA?.contactTaken ?? 1);
+      const dmgToB = dt * (mA?.contactDealt ?? 1) * (mB?.contactTaken ?? 1);
       for (const pa of A.parts) {
         if (pa.dead || pa.kind === 'root') continue;
         const a1 = add(A.astPos, pa.base);
@@ -249,8 +386,8 @@ function applyContactDamage(world: World, dt: number): void {
           const b1 = add(B.astPos, pb.base);
           const b2 = add(B.astPos, pb.tip);
           if (segSegDist(a1, a2, b1, b2) < 3.5) {
-            damagePart(A, pa.id, CONTACT_DPS[pa.kind] * dt);
-            damagePart(B, pb.id, CONTACT_DPS[pb.kind] * dt);
+            damagePart(A, pa.id, CONTACT_DPS[pa.kind] * dmgToA);
+            damagePart(B, pb.id, CONTACT_DPS[pb.kind] * dmgToB);
             if (!A.alive) return;
             if (!B.alive) break;
           }
@@ -276,9 +413,11 @@ function checkRoundEnd(world: World): void {
   );
   if (!playerAlive) {
     world.roundState = 'lost';
+    world.endReason = 'domination';
     world.endedAt = world.time;
   } else if (!rivalsAlive) {
     world.roundState = 'won';
+    world.endReason = 'domination';
     world.endedAt = world.time;
   }
 }
@@ -423,6 +562,12 @@ export function hashWorld(world: World): number {
       mix(part.charge * 100);
       mix(part.dead ? 1 : 0);
     }
+  }
+  for (const c of world.colonies) {
+    mix(c.essence);
+    mix(c.traits.length);
+    mix(c.instincts.expand * 100);
+    mix(c.instincts.vertical * 100);
   }
   mix(world.debris.length);
   for (const d of world.debris) {

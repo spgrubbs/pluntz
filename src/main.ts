@@ -18,6 +18,8 @@ import { PingView } from './render/pingView';
 import { Camera } from './ui/camera';
 import { DebugPanel } from './ui/debugPanel';
 import { Inspector } from './ui/inspector';
+import { TraitPanel } from './ui/traitPanel';
+import { bless } from './sim/stats';
 
 async function boot(): Promise<void> {
   const app = new Application();
@@ -67,6 +69,7 @@ async function boot(): Promise<void> {
   let moveRocks = false;
   let pruneMode = false;
   let pingMode = false;
+  let blessMode = false;
   let prunePath: Vec2[] | null = null;
   let draggedRock: Asteroid | null = null;
   let aiming: { plant: Plant; coneId: number; pos: Vec2 } | null = null;
@@ -144,6 +147,14 @@ async function boot(): Promise<void> {
         pingBtn.classList.remove('active');
         return;
       }
+      if (blessMode) {
+        const hit = pickPlant(world, worldPos, 30 / camera.zoom);
+        const plant = world.plants.find((p) => p.id === hit);
+        if (plant && plant.colonyId === playerColonyId) bless(world, plant);
+        blessMode = false;
+        blessBtn.classList.remove('active');
+        return;
+      }
       const hit = pickPlant(world, worldPos, 26 / camera.zoom);
       if (hit !== null) inspector.show(hit);
       else inspector.hide();
@@ -167,10 +178,32 @@ async function boot(): Promise<void> {
   pingBtn.addEventListener('click', () => {
     pingMode = !pingMode;
     pruneMode = false;
+    blessMode = false;
     prunePath = null;
     pruneBtn.classList.remove('active');
+    blessBtn.classList.remove('active');
     pingBtn.classList.toggle('active', pingMode);
   });
+  const blessBtn = document.createElement('button');
+  blessBtn.textContent = `✦ bless ${TUNING.verbs.blessCost}⬡`;
+  blessBtn.addEventListener('click', () => {
+    blessMode = !blessMode;
+    pruneMode = false;
+    pingMode = false;
+    prunePath = null;
+    pruneBtn.classList.remove('active');
+    pingBtn.classList.remove('active');
+    blessBtn.classList.toggle('active', blessMode);
+  });
+  const traitPanel = new TraitPanel(
+    () => world,
+    () => playerColonyId,
+  );
+  const traitBtn = document.createElement('button');
+  traitBtn.textContent = '⬡ evolve';
+  traitBtn.addEventListener('click', () => traitPanel.toggle());
+  actionBar.appendChild(traitBtn);
+  actionBar.appendChild(blessBtn);
   actionBar.appendChild(pingBtn);
   actionBar.appendChild(pruneBtn);
   document.getElementById('ui')!.appendChild(actionBar);
@@ -257,20 +290,33 @@ async function boot(): Promise<void> {
     else if (world.roundSec > 0 && world.time > world.roundSec) clock = '☀ THE SUN FADES';
     else if (world.roundSec > 0) clock = `☀ fades in ${fmtTime(world.roundSec - world.time)}`;
     else clock = '';
-    roundChip.textContent = clock ? `${counts}  —  ${clock}` : counts;
+    const player = world.colonies.find((c) => c.id === playerColonyId);
+    const essence = player ? ` · ⬡${player.essence}` : '';
+    let hold = '';
+    if (world.canopyWin && world.canopyHolder >= 0 && world.roundState === 'playing') {
+      const h = world.colonies.find((c) => c.id === world.canopyHolder);
+      const share = world.canopyShares.find((s) => s.colonyId === world.canopyHolder);
+      const left = Math.max(0, Math.ceil(world.canopyWin.holdSec - world.canopyHeldSec));
+      hold = ` — ◤ ${h?.name} holds ${Math.round((share?.share ?? 0) * 100)}% · ${left}s to win`;
+    }
+    roundChip.textContent = `${counts}${essence}${clock ? `  —  ${clock}` : ''}${hold}`;
 
     if (world.roundState !== 'playing' && !bannerShown) {
       bannerShown = true;
       const t = fmtTime(world.endedAt);
       const rival = world.colonies.find((c) => !c.isPlayer)?.name ?? 'the rival';
       const won = world.roundState === 'won';
+      const line =
+        world.endReason === 'canopy'
+          ? won
+            ? `Your canopy owns the light. ${rival} wither in your shade (${t}).`
+            : `The ${rival} canopy owns the light. You wither in their shade (${t}).`
+          : won
+            ? `The void is yours. The last ${rival} heartseed went dark at ${t}.`
+            : `Your last heartseed went dark at ${t}. The ${rival} overgrow your bones.`;
       banner.innerHTML = `
         <h1 class="${won ? 'win' : 'loss'}">${won ? 'OVERGROWTH' : 'EXTINCTION'}</h1>
-        <p>${
-          won
-            ? `The void is yours. The last ${rival} heartseed went dark at ${t}.`
-            : `Your last heartseed went dark at ${t}. The ${rival} overgrow your bones.`
-        }</p>
+        <p>${line}</p>
         <div class="btn-row"><button class="again">grow again</button></div>`;
       banner.classList.add('open');
       (banner.querySelector('.again') as HTMLElement).addEventListener('click', () => {
@@ -334,6 +380,7 @@ async function boot(): Promise<void> {
     }
 
     inspector.update(world);
+    traitPanel.update();
     updateRoundUi();
 
     panel.update({
