@@ -14,6 +14,7 @@ import {
 } from './light';
 import { emit } from './events';
 import { colonyMods, type Mods } from './stats';
+import { surfaceRadiusAt } from './asteroid';
 
 const EMPTY_SEGS: CanopySeg[] = [];
 
@@ -26,7 +27,7 @@ export function createPlant(
 ): Plant {
   const f = FACTIONS[faction];
   const up = fromAngle(anchorAngle);
-  const anchor = scale(up, asteroid.radius);
+  const anchor = scale(up, surfaceRadiusAt(asteroid, anchorAngle));
   const heart: Part = {
     id: 0,
     kind: 'heart',
@@ -213,6 +214,13 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     if (tryGrow(plant, f, toSun, mods)) {
       plant.growthCooldown = cooldown;
       plant.version++;
+      const grown = plant.parts[plant.parts.length - 1];
+      emit({
+        type: 'grow',
+        x: plant.astPos.x + grown.tip.x,
+        y: plant.astPos.y + grown.tip.y,
+        faction: plant.faction,
+      });
     } else {
       plant.growthCooldown = cooldown * 0.5; // re-check soon
     }

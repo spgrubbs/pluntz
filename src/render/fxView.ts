@@ -14,7 +14,7 @@ interface Particle {
   drag: number;
 }
 
-const MAX_PARTICLES = 700;
+const MAX_PARTICLES = 1000;
 
 /**
  * Render-only particle layer. Bursts come from sim events (impacts, deaths,
@@ -56,7 +56,73 @@ export class FxView {
         case 'seedFizzle':
           this.burst(e.x, e.y, 4, 0x6a705f, 18, 0.9);
           break;
+        case 'grow':
+          this.burst(e.x, e.y, 2, 0xaef5cf, 12, 0.5);
+          break;
+        case 'bless':
+          this.burst(e.x, e.y, 18, 0xffd257, 45, 1.6);
+          this.burst(e.x, e.y, 8, 0xfff2c9, 20, 2.2);
+          break;
+        case 'ping':
+          this.burst(e.x, e.y, 12, 0x69d2ff, 55, 1.0);
+          break;
+        case 'lure':
+          this.burst(e.x, e.y, 14, 0xff8ac2, 50, 1.2);
+          break;
       }
+    }
+  }
+
+  /** Continuous ambience: seed trails, blessed motes, drifting space dust. */
+  ambientFlow(world: World, dt: number): void {
+    // seed contrails
+    for (const s of world.seeds) {
+      if (Math.random() < dt * 30) {
+        this.spawn({
+          x: s.pos.x + this.rand(-2, 2),
+          y: s.pos.y + this.rand(-2, 2),
+          vx: -s.vel.x * 0.08 + this.rand(-4, 4),
+          vy: -s.vel.y * 0.08 + this.rand(-4, 4),
+          life: 0,
+          maxLife: this.rand(0.4, 0.9),
+          size: 1.5,
+          color: 0xe8f5c0,
+          drag: 0.92,
+        });
+      }
+    }
+    // blessed plants radiate rising gold motes
+    for (const plant of world.plants) {
+      if (!plant.alive || world.time >= plant.blessedUntil) continue;
+      if (Math.random() < dt * 6) {
+        const parts = plant.parts.filter((p) => !p.dead);
+        const p = parts[(Math.random() * parts.length) | 0];
+        this.spawn({
+          x: plant.astPos.x + p.tip.x,
+          y: plant.astPos.y + p.tip.y,
+          vx: this.rand(-5, 5),
+          vy: this.rand(-14, -6),
+          life: 0,
+          maxLife: this.rand(0.7, 1.3),
+          size: 1.6,
+          color: 0xffd257,
+          drag: 0.94,
+        });
+      }
+    }
+    // faint drifting dust across the void
+    if (Math.random() < dt * 3) {
+      this.spawn({
+        x: this.rand(-world.width / 2, world.width / 2),
+        y: this.rand(-world.height / 2, world.height / 2),
+        vx: this.rand(-6, 6),
+        vy: this.rand(-6, 6),
+        life: 0,
+        maxLife: this.rand(2.5, 5),
+        size: this.rand(0.8, 1.6),
+        color: 0x7a86a3,
+        drag: 1,
+      });
     }
   }
 

@@ -92,6 +92,7 @@ export function createWorld(map: MapDef, seed: number): World {
   const fauna = map.fauna ?? { frugivora: 0, phytophaga: 0, anthophila: 0 };
   for (const kind of ['frugivora', 'phytophaga', 'anthophila'] as const) {
     for (let i = 0; i < fauna[kind]; i++) {
+      const hp = kind === 'frugivora' ? 30 : kind === 'phytophaga' ? 25 : 8;
       world.fauna.push({
         id: world.nextId++,
         kind,
@@ -105,6 +106,9 @@ export function createWorld(map: MapDef, seed: number): World {
         carryFaction: null,
         waypoint: v(rng.range(-map.width / 3, map.width / 3), rng.range(-map.height / 3, map.height / 3)),
         timer: rng.range(2, 8),
+        hp,
+        maxHp: hp,
+        orbit: null,
       });
     }
   }
@@ -117,6 +121,7 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
   if (!colony || colony.essence < 2) return false;
   colony.essence -= 2;
   world.lure = { x: pos.x, y: pos.y, colonyId, expires: world.time + 40 };
+  emit({ type: 'lure', x: pos.x, y: pos.y });
   return true;
 }
 
@@ -132,16 +137,32 @@ function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: nu
   fn.pos.y += fn.vel.y * dt;
 }
 
+/**
+ * Idle flight rides an orbit around a rock, hopping to a new one now and
+ * then — the transfer arcs read as orbital mechanics without simulating any.
+ */
 function faunaWanderTick(world: World, fn: import('./types').Fauna, dt: number): void {
   fn.timer -= dt;
-  if (fn.timer <= 0 || dist(fn.pos, fn.waypoint) < 30) {
-    fn.waypoint = v(
-      world.rng.range(-world.width / 2.4, world.width / 2.4),
-      world.rng.range(-world.height / 2.4, world.height / 2.4),
-    );
-    fn.timer = world.rng.range(4, 9);
+  if (!fn.orbit || fn.timer <= 0) {
+    const ast = world.asteroids[world.rng.int(world.asteroids.length)];
+    const low = fn.kind === 'phytophaga';
+    fn.orbit = {
+      ast: ast.id,
+      r: ast.radius + (low ? world.rng.range(18, 48) : world.rng.range(55, 130)),
+      a: Math.atan2(fn.pos.y - ast.pos.y, fn.pos.x - ast.pos.x),
+      dir: world.rng.next() < 0.5 ? -1 : 1,
+    };
+    fn.timer = world.rng.range(9, 18);
   }
-  steer(fn, fn.waypoint, FAUNA_SPEED[fn.kind] * 0.6, dt);
+  const speed = FAUNA_SPEED[fn.kind] * 0.65;
+  const ast = world.asteroids.find((a) => a.id === fn.orbit!.ast);
+  if (!ast) {
+    fn.orbit = null;
+    return;
+  }
+  fn.orbit.a += (fn.orbit.dir * speed * dt) / fn.orbit.r;
+  const target = add(ast.pos, scale(fromAngle(fn.orbit.a), fn.orbit.r));
+  steer(fn, target, speed * 1.5, dt);
 }
 
 /** Ripe fruit (armed fauna-style cones) not yet claimed by another bird. */
@@ -348,8 +369,15 @@ export function sproutAt(
 ): boolean {
   const R = FACTIONS[faction].repro;
   const anchor = add(ast.pos, scale(fromAngle(angleRad), ast.radius));
+  // spacing rule = territory rule: a seed cannot take root inside any living
+  // plant's substrate bed (the visible litter arc), nor closer than the
+  // faction's hard minimum. Mature plants therefore guard more ground.
+  const seedHalf = (TUNING.colony.substrate.baseArc * 0.5) / ast.radius;
   for (const pl of world.plants) {
     if (!pl.alive || pl.asteroidId !== ast.id) continue;
+    let gap = Math.abs(angleRad - pl.anchorAngle) % (Math.PI * 2);
+    if (gap > Math.PI) gap = Math.PI * 2 - gap;
+    if (gap < substrateHalfAngle(pl) + seedHalf) return false;
     const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
     if (dist(anchor, other) < R.minSpacing) return false;
   }
@@ -368,6 +396,7 @@ export function sproutAt(
 /** Place (or move) a colony's ping — the attention verb. */
 export function setPing(world: World, colonyId: number, pos: Vec2): void {
   world.ping = { x: pos.x, y: pos.y, colonyId, expires: world.time + 60 };
+  emit({ type: 'ping', x: pos.x, y: pos.y });
 }
 
 function stepSeeds(world: World, dt: number): void {

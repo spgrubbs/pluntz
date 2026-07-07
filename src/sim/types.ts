@@ -15,7 +15,11 @@ export interface SimEvent {
     | 'seedLaunch'
     | 'seedLand'
     | 'seedFizzle'
-    | 'sprout';
+    | 'sprout'
+    | 'grow' // a part was added (tiny sparkle)
+    | 'bless'
+    | 'ping'
+    | 'lure';
   x: number;
   y: number;
   kind?: PartKind;
@@ -161,6 +165,10 @@ export interface Fauna {
   carryFaction: FactionId | null;
   waypoint: Vec2;
   timer: number;
+  hp: number;
+  maxHp: number;
+  /** Idle flight rides orbits around rocks (looks celestial, is cheap). */
+  orbit: { ast: number; r: number; a: number; dir: number } | null;
 }
 
 /** A drifting rock: the ambient hazard. Shatters on asteroids and plants. */

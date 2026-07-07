@@ -6,6 +6,7 @@ export interface DebugCallbacks {
   spawnDebris(): void;
   grantEnergy(): void;
   reset(reseed: boolean): void;
+  openMenu(): void;
 }
 
 export interface DebugStats {
@@ -34,7 +35,7 @@ export class DebugPanel {
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML = `
-      <div class="panel-head">PLUNTZ dev — M7</div>
+      <div class="panel-head">PLUNTZ dev — M7.1</div>
       <div class="panel-body">
         <div class="stats"></div>
         <div class="btn-row speed"></div>
@@ -53,6 +54,7 @@ export class DebugPanel {
         <div class="btn-row">
           <button class="reset">replant</button>
           <button class="reseed">reseed</button>
+          <button class="menu-open">menu</button>
         </div>
       </div>`;
     document.getElementById('ui')!.appendChild(panel);
@@ -98,6 +100,9 @@ export class DebugPanel {
     );
     (panel.querySelector('.reseed') as HTMLElement).addEventListener('click', () =>
       cb.reset(true),
+    );
+    (panel.querySelector('.menu-open') as HTMLElement).addEventListener('click', () =>
+      cb.openMenu(),
     );
     this.sunVal = panel.querySelector('.sun-val') as HTMLElement;
   }

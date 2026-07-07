@@ -5,9 +5,9 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M7 — two factions, a strategy layer, and living fauna. Pinophyta
-  spires vs Anthophyta vines; Essence, traits, Bless, instincts, Canopy win;
-  Frugivora / Phytophaga / Anthophila; verbs: Ping, Prune, Bless, Lure.
+- **Status:** M7.1 — start menu with faction/map/seed select, surface-anchored
+  plants and territory, tappable fauna riding orbits, verb particle bursts, and
+  a general juice pass. Two factions, strategy layer, living fauna.
 
 ## Development
 
@@ -22,7 +22,23 @@ npm run build    # typecheck + production bundle in dist/
 
 **URL params:** `?seed=123` fixes the world seed (also shown in the debug panel).
 
-## Current test script (M6-M7)
+## Current test script (M7.1)
+
+1. **Menu:** the game opens on a start menu — pick map, your clade, the rival's
+   clade, and a seed, then GROW. (Reopen via the debug panel's *menu* button or
+   the end-of-round banner.) The URL updates for shareable setups.
+2. **Surface fidelity:** zoom into any plant — heartseeds sit exactly on the
+   drawn rock surface and the litter bed follows the rock's actual contour.
+   The bed is also the rule: no seed (yours or theirs) can root inside one, so
+   territory, energy sharing, and seedling spacing are all the same visible thing.
+3. **Fauna:** tap any critter for its card — name, neutral tag, current
+   objective, health. Idle fauna ride orbits around rocks and hop between them.
+4. **Verbs & juice:** ping/lure/bless all burst particles at the target; a
+   blessed plant rains gold motes and shows "✦ blessed Ns" on its card; growth
+   sparkles; seeds leave contrails. An armed cone never self-fires while you're
+   dragging its aim.
+
+## Earlier scripts (M6-M7)
 
 1. **Strategy:** the round chip shows your essence (⬡). Open **⬡ evolve** for the
    trait tree and the two instinct sliders (fortify↔expand, spread↔tall). Essence

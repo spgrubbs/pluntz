@@ -20,6 +20,7 @@ import { Camera } from './ui/camera';
 import { DebugPanel } from './ui/debugPanel';
 import { Inspector } from './ui/inspector';
 import { TraitPanel } from './ui/traitPanel';
+import { Menu, type GameConfig } from './ui/menu';
 import { bless } from './sim/stats';
 
 async function boot(): Promise<void> {
@@ -33,18 +34,26 @@ async function boot(): Promise<void> {
   });
   document.body.appendChild(app.canvas);
 
-  // --- World -----------------------------------------------------------------
+  // --- World config (URL params seed the menu; menu owns the choice) ----------
   const params = new URLSearchParams(location.search);
-  const urlSeed = params.get('seed');
-  let seed = urlSeed ? Number(urlSeed) >>> 0 : 1337;
-  const baseMap = MAPS[params.get('map') ?? DEFAULT_MAP] ?? MAPS[DEFAULT_MAP];
-  // ?faction= / ?ai= override colony factions for matchup testing (M7)
-  const map: MapDef = JSON.parse(JSON.stringify(baseMap));
-  const pf = params.get('faction') as FactionId | null;
-  const af = params.get('ai') as FactionId | null;
-  for (const c of map.colonies) {
-    if (pf && c.player && (pf === 'pinophyta' || pf === 'anthophyta')) c.faction = pf;
-    if (af && !c.player && (af === 'pinophyta' || af === 'anthophyta')) c.faction = af;
+  const okFaction = (x: string | null): x is FactionId =>
+    x === 'pinophyta' || x === 'anthophyta';
+  const pf = params.get('faction');
+  const af = params.get('ai');
+  let cfg: GameConfig = {
+    mapId: MAPS[params.get('map') ?? ''] ? params.get('map')! : DEFAULT_MAP,
+    playerFaction: okFaction(pf) ? pf : 'pinophyta',
+    aiFaction: okFaction(af) ? af : 'pinophyta',
+    seed: params.get('seed') ? Number(params.get('seed')) >>> 0 : (Date.now() % 0xfffff) >>> 0,
+  };
+  let seed = cfg.seed;
+  let map: MapDef = buildMap(cfg);
+  function buildMap(c: GameConfig): MapDef {
+    const m: MapDef = JSON.parse(JSON.stringify(MAPS[c.mapId] ?? MAPS[DEFAULT_MAP]));
+    for (const col of m.colonies) {
+      col.faction = col.player ? c.playerFaction : c.aiFaction;
+    }
+    return m;
   }
   let world: World = createWorld(map, seed);
   setEventSink(world.events);
@@ -173,6 +182,11 @@ async function boot(): Promise<void> {
         blessBtn.classList.remove('active');
         return;
       }
+      const fauna = pickFauna(world, worldPos, 24 / camera.zoom);
+      if (fauna !== null) {
+        inspector.showFauna(fauna);
+        return;
+      }
       const hit = pickPlant(world, worldPos, 26 / camera.zoom);
       if (hit !== null) inspector.show(hit);
       else inspector.hide();
@@ -269,6 +283,10 @@ async function boot(): Promise<void> {
       const vel = scale(norm(sub(target, from)), TUNING.debris.debugSpeed);
       spawnDebris(world, from, vel, world.rng.range(8, 13));
     },
+    openMenu: () => {
+      speed = 0;
+      menu.show();
+    },
     grantEnergy: () => {
       for (const plant of world.plants) {
         if (plant.alive) plant.energy = Math.min(plant.energy + 60, plant.capacity);
@@ -290,6 +308,24 @@ async function boot(): Promise<void> {
     starfield = new Starfield(world.width, world.height, seed);
     app.stage.addChildAt(starfield.container, 0);
   }
+
+  // --- Start menu -----------------------------------------------------------------
+  const menu = new Menu(cfg, (chosen) => {
+    cfg = chosen;
+    seed = cfg.seed;
+    map = buildMap(cfg);
+    resetWorld(false);
+    speed = 1;
+    const qs = new URLSearchParams({
+      map: cfg.mapId,
+      faction: cfg.playerFaction,
+      ai: cfg.aiFaction,
+      seed: String(cfg.seed),
+    });
+    history.replaceState(null, '', `?${qs.toString()}`);
+  });
+  if (!params.get('play')) speed = 0; // hold the sim while the menu is up
+  else menu.hide();
 
   // --- Round chip + end-of-round banner ------------------------------------------
   const roundChip = document.createElement('div');
@@ -349,10 +385,15 @@ async function boot(): Promise<void> {
       banner.innerHTML = `
         <h1 class="${won ? 'win' : 'loss'}">${won ? 'OVERGROWTH' : 'EXTINCTION'}</h1>
         <p>${line}</p>
-        <div class="btn-row"><button class="again">grow again</button></div>`;
+        <div class="btn-row"><button class="again">grow again</button><button class="tomenu">menu</button></div>`;
       banner.classList.add('open');
       (banner.querySelector('.again') as HTMLElement).addEventListener('click', () => {
         resetWorld(true);
+      });
+      (banner.querySelector('.tomenu') as HTMLElement).addEventListener('click', () => {
+        banner.classList.remove('open');
+        speed = 0;
+        menu.show();
       });
     }
   }
@@ -397,7 +438,14 @@ async function boot(): Promise<void> {
     fxView.ingest(world.events);
     world.events.length = 0;
     fxView.ambientWounds(world, frame);
+    fxView.ambientFlow(world, frame);
     fxView.update(frame);
+
+    // an actively-aimed cone never self-fires out from under the player
+    if (aiming) {
+      const cone = aiming.plant.parts[aiming.coneId];
+      if (!cone.dead && cone.armedAt >= 0) cone.armedAt = world.time;
+    }
 
     // aim affordance: range ring + aim line while dragging from an armed cone
     aimG.clear();
@@ -436,6 +484,19 @@ async function boot(): Promise<void> {
     },
     camera,
   };
+}
+
+function pickFauna(world: World, at: Vec2, radius: number): number | null {
+  let best: number | null = null;
+  let bestD = radius + 8;
+  for (const fn of world.fauna) {
+    const d = Math.hypot(fn.pos.x - at.x, fn.pos.y - at.y);
+    if (d < bestD) {
+      bestD = d;
+      best = fn.id;
+    }
+  }
+  return best;
 }
 
 function pickPlant(world: World, at: Vec2, radius: number): number | null {

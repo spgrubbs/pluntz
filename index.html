@@ -218,6 +218,85 @@
         color: #8fa0bd;
         line-height: 1.4;
       }
+      .menu {
+        position: absolute;
+        inset: 0;
+        background: rgba(4, 6, 13, 0.88);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      .menu.open {
+        display: flex;
+      }
+      .menu-card {
+        width: min(400px, calc(100vw - 28px));
+        max-height: 88vh;
+        overflow-y: auto;
+        background: rgba(8, 12, 24, 0.97);
+        border: 1px solid #2a3550;
+        border-radius: 16px;
+        padding: 22px 24px;
+      }
+      .menu-card h1 {
+        margin: 0;
+        text-align: center;
+        color: #7fe8b0;
+        letter-spacing: 10px;
+        font-size: 30px;
+        text-shadow: 0 0 24px rgba(127, 232, 176, 0.4);
+      }
+      .menu-sub {
+        text-align: center;
+        color: #56637f;
+        margin: 6px 0 16px;
+        font-size: 11px;
+      }
+      .menu-section {
+        margin: 12px 0;
+      }
+      .menu-section > span {
+        display: block;
+        color: #7fa0d8;
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .menu-row {
+        display: flex;
+        gap: 8px;
+      }
+      .menu-row button {
+        flex: 1;
+        padding: 9px 8px;
+        text-align: left;
+      }
+      .menu-row button small {
+        display: block;
+        color: #56637f;
+        margin-top: 3px;
+        font-size: 10px;
+      }
+      .menu-row .seed {
+        flex: 1;
+        font-family: inherit;
+        background: #182238;
+        color: #dce6f5;
+        border: 1px solid #2f3d5e;
+        border-radius: 5px;
+        padding: 6px 9px;
+      }
+      .menu-card .grow {
+        width: 100%;
+        margin-top: 16px;
+        padding: 13px;
+        font-size: 16px;
+        letter-spacing: 4px;
+        background: #2b5c46;
+        color: #aef5cf;
+        border-color: #3f8a67;
+      }
       .actionbar {
         position: absolute;
         right: 10px;

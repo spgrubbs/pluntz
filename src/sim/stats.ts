@@ -1,6 +1,7 @@
 import type { Colony, Plant, World } from './types';
 import { TRAITS } from '../content/traits';
 import { TUNING } from '../content/tuning';
+import { emit } from './events';
 
 /** Resolved colony-wide modifiers from traits + instinct sliders. */
 export interface Mods {
@@ -88,5 +89,10 @@ export function bless(world: World, plant: Plant): boolean {
   colony.essence -= V.blessCost;
   plant.blessedUntil = world.time + V.blessDuration;
   plant.version++;
+  emit({
+    type: 'bless',
+    x: plant.astPos.x + plant.parts[0].base.x,
+    y: plant.astPos.y + plant.parts[0].base.y,
+  });
   return true;
 }

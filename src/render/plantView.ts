@@ -3,6 +3,8 @@ import type { Plant, World } from '../sim/types';
 import { FACTIONS, type FactionColors } from '../content/factions';
 import { rot, scale, add } from '../sim/vec';
 import { substrateHalfAngle } from '../sim/plant';
+import { surfaceRadiusAt } from '../sim/asteroid';
+import type { Asteroid } from '../sim/types';
 
 interface Entry {
   g: Graphics;
@@ -62,7 +64,7 @@ export class PlantView {
       const key = `${plant.version}:${starveBand}:${chargeSig}`;
       if (key !== e.key) {
         e.key = key;
-        drawPlant(e.g, plant, paletteFor(world, plant));
+        drawPlant(e.g, plant, paletteFor(world, plant), ast);
       }
     }
     for (const [id, e] of this.entries) {
@@ -110,20 +112,51 @@ function paletteFor(world: World, plant: Plant): FactionColors {
   return palettes[Math.min(colony?.palette ?? 0, palettes.length - 1)];
 }
 
-function drawPlant(g: Graphics, plant: Plant, c: FactionColors): void {
+/** Sampled arc (no Pixi arc() — its path state caused stray-ray artifacts). */
+function strokeArcSampled(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+  a0: number,
+  a1: number,
+  width: number,
+  color: number,
+  alpha: number,
+): void {
+  const steps = Math.max(4, Math.ceil(Math.abs(a1 - a0) / 0.3));
+  g.moveTo(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r);
+  for (let k = 1; k <= steps; k++) {
+    const a = a0 + ((a1 - a0) * k) / steps;
+    g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  g.stroke({ width, color, alpha });
+}
+
+function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): void {
   const f = FACTIONS[plant.faction];
   const starving = plant.alive && plant.energy < plant.capacity * 0.15;
   g.clear();
 
-  // terraformed substrate bed: an arc of shed litter around the anchor.
-  // Beds of one colony that touch are also the energy-sharing network.
+  // terraformed substrate bed: shed litter hugging the actual rock surface.
+  // Beds of one colony that touch are also the energy-sharing network, and
+  // no seed (friend or foe) can take root inside one.
   if (plant.alive) {
-    const r = Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y);
     const half = substrateHalfAngle(plant);
+    const steps = Math.max(6, Math.ceil((half * 2) / 0.1));
     const a0 = plant.anchorAngle - half;
-    g.moveTo(Math.cos(a0) * (r + 1.5), Math.sin(a0) * (r + 1.5))
-      .arc(0, 0, r + 1.5, a0, plant.anchorAngle + half)
-      .stroke({ width: 4.5, color: c.litter, alpha: 0.9 });
+    let started = false;
+    for (let k = 0; k <= steps; k++) {
+      const a = a0 + ((half * 2) * k) / steps;
+      const r = surfaceRadiusAt(ast, a) + 2;
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (!started) {
+        g.moveTo(x, y);
+        started = true;
+      } else g.lineTo(x, y);
+    }
+    g.stroke({ width: 4.5, color: c.litter, alpha: 0.9 });
   }
 
   for (const p of plant.parts) {
@@ -226,10 +259,9 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors): void {
             p.base.x - perp.x * w, p.base.y - perp.y * w,
           ]).fill({ color: armed ? c.coneArmed : c.cone });
           if (!armed && frac > 0.02) {
-            // charge arc around the ripening cone
-            g.moveTo(p.base.x, p.base.y - 7)
-              .arc(p.base.x, p.base.y, 7, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2)
-              .stroke({ width: 1.4, color: c.coneArmed, alpha: 0.7 });
+            // charge arc oriented around the cone's own axis
+            const ca = Math.atan2(p.dir.y, p.dir.x);
+            strokeArcSampled(g, p.base.x, p.base.y, 7, ca, ca + frac * Math.PI * 2, 1.4, c.coneArmed, 0.7);
           }
         }
         break;

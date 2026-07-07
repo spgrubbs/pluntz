@@ -1,0 +1,115 @@
+import type { FactionId } from '../sim/types';
+import { MAPS } from '../content/maps/index';
+
+export interface GameConfig {
+  mapId: string;
+  playerFaction: FactionId;
+  aiFaction: FactionId;
+  seed: number;
+}
+
+const FACTION_CHOICES: { id: FactionId; label: string; blurb: string }[] = [
+  { id: 'pinophyta', label: '🌲 Pinophyta', blurb: 'patient armored spires · ballistic cones' },
+  { id: 'anthophyta', label: '✿ Anthophyta', blurb: 'racing vines · fruit carried by birds' },
+];
+
+/** The front door: map, factions, seed, GROW. */
+export class Menu {
+  private el: HTMLElement;
+  private cfg: GameConfig;
+
+  constructor(initial: GameConfig, onStart: (cfg: GameConfig) => void) {
+    this.cfg = { ...initial };
+    const el = document.createElement('div');
+    el.className = 'menu open';
+    el.innerHTML = `
+      <div class="menu-card">
+        <h1>PLUNTZ</h1>
+        <p class="menu-sub">a small vulnerable sapling in a large dynamic void</p>
+        <div class="menu-section"><span>map</span><div class="menu-row maps"></div></div>
+        <div class="menu-section"><span>your clade</span><div class="menu-row pf"></div></div>
+        <div class="menu-section rival-row"><span>rival clade</span><div class="menu-row af"></div></div>
+        <div class="menu-section">
+          <span>seed</span>
+          <div class="menu-row">
+            <input class="seed" type="number" />
+            <button class="dice">🎲</button>
+          </div>
+        </div>
+        <button class="grow">G R O W</button>
+      </div>`;
+    document.getElementById('ui')!.appendChild(el);
+    this.el = el;
+
+    const mapsRow = el.querySelector('.maps')!;
+    for (const [id, m] of Object.entries(MAPS)) {
+      const b = document.createElement('button');
+      b.textContent = m.name;
+      b.dataset.id = id;
+      b.addEventListener('click', () => {
+        this.cfg.mapId = id;
+        this.sync();
+      });
+      mapsRow.appendChild(b);
+    }
+    for (const [row, key] of [
+      ['.pf', 'playerFaction'],
+      ['.af', 'aiFaction'],
+    ] as const) {
+      const target = el.querySelector(row)!;
+      for (const fc of FACTION_CHOICES) {
+        const b = document.createElement('button');
+        b.innerHTML = `${fc.label}<small>${fc.blurb}</small>`;
+        b.dataset.id = fc.id;
+        b.addEventListener('click', () => {
+          this.cfg[key] = fc.id;
+          this.sync();
+        });
+        target.appendChild(b);
+      }
+    }
+    const seedInput = el.querySelector('.seed') as HTMLInputElement;
+    seedInput.addEventListener('input', () => {
+      this.cfg.seed = Number(seedInput.value) >>> 0;
+    });
+    el.querySelector('.dice')!.addEventListener('click', () => {
+      this.cfg.seed = (Date.now() % 0xfffff) >>> 0;
+      this.sync();
+    });
+    el.querySelector('.grow')!.addEventListener('click', () => {
+      this.hide();
+      onStart({ ...this.cfg });
+    });
+    this.sync();
+  }
+
+  private sync(): void {
+    const el = this.el;
+    (el.querySelector('.seed') as HTMLInputElement).value = String(this.cfg.seed);
+    el.querySelectorAll<HTMLElement>('.maps button').forEach((b) =>
+      b.classList.toggle('active', b.dataset.id === this.cfg.mapId),
+    );
+    el.querySelectorAll<HTMLElement>('.pf button').forEach((b) =>
+      b.classList.toggle('active', b.dataset.id === this.cfg.playerFaction),
+    );
+    el.querySelectorAll<HTMLElement>('.af button').forEach((b) =>
+      b.classList.toggle('active', b.dataset.id === this.cfg.aiFaction),
+    );
+    // sandbox maps have no rival colony
+    const hasRival = (MAPS[this.cfg.mapId]?.colonies.length ?? 1) > 1;
+    (el.querySelector('.rival-row') as HTMLElement).style.display = hasRival ? '' : 'none';
+  }
+
+  show(): void {
+    this.sync();
+    this.el.classList.add('open');
+  }
+
+  hide(): void {
+    this.el.classList.remove('open');
+  }
+
+  isOpen(): boolean {
+    return this.el.classList.contains('open');
+  }
+}

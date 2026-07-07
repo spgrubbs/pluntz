@@ -91,6 +91,9 @@ export function plantStatus(world: World, plant: Plant): PlantStatus {
 
   const saving = cost > 0 && spendable < cost;
   if (saving) aim += ` · saving energy (${Math.max(spendable, 0).toFixed(0)}/${cost})`;
+  if (world.time < plant.blessedUntil) {
+    aim = `✦ blessed ${Math.ceil(plant.blessedUntil - world.time)}s · ${aim}`;
+  }
 
   const net = plant.lastIncome - plant.lastUpkeep;
   let warning: string | null = null;
