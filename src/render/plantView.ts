@@ -2,6 +2,7 @@ import { Container, Graphics } from 'pixi.js';
 import type { Plant, World } from '../sim/types';
 import { FACTIONS, type FactionColors } from '../content/factions';
 import { rot, scale, add } from '../sim/vec';
+import { substrateHalfAngle } from '../sim/plant';
 
 interface Entry {
   g: Graphics;
@@ -106,6 +107,17 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors): void {
   const starving = plant.alive && plant.energy < plant.capacity * 0.15;
   g.clear();
 
+  // terraformed substrate bed: an arc of shed litter around the anchor.
+  // Beds of one colony that touch are also the energy-sharing network.
+  if (plant.alive) {
+    const r = Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y);
+    const half = substrateHalfAngle(plant);
+    const a0 = plant.anchorAngle - half;
+    g.moveTo(Math.cos(a0) * (r + 1.5), Math.sin(a0) * (r + 1.5))
+      .arc(0, 0, r + 1.5, a0, plant.anchorAngle + half)
+      .stroke({ width: 4.5, color: c.litter, alpha: 0.9 });
+  }
+
   for (const p of plant.parts) {
     if (p.dead && (p.kind === 'leaf' || p.kind === 'cone')) continue; // they drop
     const dmg = p.dead ? 0 : 1 - p.hp / p.maxHp;
@@ -179,19 +191,41 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors): void {
         break;
       }
       case 'heart': {
+        // The heartseed is a pinecone sitting on the rock, oriented along the
+        // plant's up vector. Energy = the cone's inner glow filling upward.
+        const up = plant.up;
+        const perp = rot(up, Math.PI / 2);
+        const at = (t: number, w: number): [number, number] => [
+          p.base.x + up.x * t + perp.x * w,
+          p.base.y + up.y * t + perp.y * w,
+        ];
+        const kite = (s: number): number[] => [
+          ...at(0.5 * s, -7 * s),
+          ...at(9 * s, -5.2 * s),
+          ...at(16 * s, 0),
+          ...at(9 * s, 5.2 * s),
+          ...at(0.5 * s, 7 * s),
+        ];
         if (p.dead) {
-          g.circle(p.base.x, p.base.y, 9).fill({ color: HUSK_HEART, alpha: 0.7 });
-          g.circle(p.base.x, p.base.y, 4.2).fill({ color: 0x3a352e });
+          g.poly(kite(1)).fill({ color: HUSK_HEART, alpha: 0.75 });
           break;
         }
         const ratio = Math.max(0, Math.min(1, plant.energy / plant.capacity));
-        const heartColor = dmg > 0.05 ? lerpColor(c.heart, WOUND, dmg * 0.7) : c.heart;
-        g.circle(p.base.x, p.base.y, 9).fill({ color: heartColor, alpha: 0.9 });
-        g.circle(p.base.x, p.base.y, 4.2).fill({ color: c.heartCore });
-        if (ratio > 0.02) {
-          g.moveTo(p.base.x, p.base.y - 13)
-            .arc(p.base.x, p.base.y, 13, -Math.PI / 2, -Math.PI / 2 + ratio * Math.PI * 2)
-            .stroke({ width: 2.5, color: starving ? c.leafStarving : c.heartCore, alpha: 0.9 });
+        const body = dmg > 0.05 ? lerpColor(c.cone, WOUND, dmg * 0.7) : c.cone;
+        g.poly(kite(1)).fill({ color: body });
+        // energy glow fills the cone from its base upward
+        if (ratio > 0.03) {
+          const glow = starving ? c.leafStarving : c.heartCore;
+          g.poly(kite(0.34 + 0.56 * ratio)).fill({ color: glow, alpha: 0.35 + ratio * 0.45 });
+          g.circle(p.base.x + up.x * 4, p.base.y + up.y * 4, 2.6).fill({ color: glow });
+        }
+        // scale chevrons for the pinecone read
+        for (const t of [4.5, 8.5, 12]) {
+          const w = 6 * (1 - t / 18);
+          g.moveTo(...at(t + 2.2, -w))
+            .lineTo(...at(t, 0))
+            .lineTo(...at(t + 2.2, w))
+            .stroke({ width: 1.1, color: 0x241a10, alpha: 0.65 });
         }
         break;
       }

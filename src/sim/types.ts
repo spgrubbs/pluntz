@@ -110,14 +110,14 @@ export interface SunState {
   cycleRate: number; // radians/sec when cycling
 }
 
-/** A colony: one player's (or AI's) empire of plants + shared energy pool. */
+/** A colony: one player's (or AI's) empire of plants. Energy moves between
+ * plants through touching substrate beds, not a global pool. */
 export interface Colony {
   id: number;
   name: string;
   faction: FactionId;
   isPlayer: boolean;
   palette: number; // index into the faction's palette list
-  reserve: number; // shared energy pool fed by thriving plants
 }
 
 /** An airborne seed: ballistic, sprouts where it lands. */

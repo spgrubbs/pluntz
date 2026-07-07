@@ -33,7 +33,8 @@ describe('death & husks', () => {
     blocker.pos.x = home.pos.x + Math.cos(w.sun.angle) * 600;
     blocker.pos.y = home.pos.y + Math.sin(w.sun.angle) * 600;
     plant.energy = 0; // skip the reserve drain, straight to starvation
-    w.colonies[0].reserve = 0; // and empty the colony pool it would sip from
+    // also cut off substrate feeding from same-rock siblings
+    for (const p of w.plants) if (p !== plant) p.energy = 0;
 
     // needles wither first
     for (let i = 0; i < 300; i++) stepWorld(w, TUNING.simDt); // 30s
@@ -50,8 +51,12 @@ describe('death & husks', () => {
     w.debrisPerMin = 0; // no ambient spawns muddying the assertion
     w.debris.length = 0; // and none left over from the grow-up phase
     const plant = w.plants[0];
+    // hp deficit is immune to bark-hardening noise (raises hp & maxHp equally)
+    const n0 = plant.parts.length;
     const hpSum = (): number =>
-      plant.parts.reduce((n, p) => n + (p.dead ? 0 : p.hp), 0);
+      plant.parts
+        .slice(0, n0)
+        .reduce((n, p) => n - (p.dead ? p.maxHp : p.maxHp - p.hp), 0);
     const before = hpSum();
     const ast = w.asteroids[0];
     // fire a heavy rock straight at the crown

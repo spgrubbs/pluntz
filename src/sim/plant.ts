@@ -3,8 +3,18 @@ import { add, sub, scale, norm, rot, dot, fromAngle, segsIntersect, DEG } from '
 import { makeRng } from './rng';
 import type { Asteroid, Part, PartKind, Plant, World, FactionId } from './types';
 import { FACTIONS, type FactionDef } from '../content/factions';
-import { shadeAt, toSunVec, type CanopySeg } from './light';
+import { TUNING } from '../content/tuning';
+import {
+  shadeAt,
+  toSunVec,
+  canopyCross,
+  CANOPY_BIN,
+  type CanopyIndex,
+  type CanopySeg,
+} from './light';
 import { emit } from './events';
+
+const EMPTY_SEGS: CanopySeg[] = [];
 
 export function createPlant(
   world: World,
@@ -69,7 +79,7 @@ export function createPlant(
   };
 }
 
-export function stepPlant(world: World, plant: Plant, dt: number, canopy: CanopySeg[]): void {
+export function stepPlant(world: World, plant: Plant, dt: number, canopy: CanopyIndex): void {
   if (!plant.alive) return; // husks are inert until decomposers exist (M8)
   const f = FACTIONS[plant.faction];
   const asteroid = world.asteroids.find((a) => a.id === plant.asteroidId);
@@ -107,7 +117,10 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     if (p.kind !== 'leaf') continue;
     totalLeaves++;
     const mid = add(asteroid.pos, add(p.base, scale(p.dir, p.len * 0.5)));
-    const shade = shadeAt(mid, toSun, world.asteroids, canopy, plant.id, p.group);
+    const bin =
+      canopy.bins.get(Math.floor(canopyCross(mid.x, mid.y, toSun) / CANOPY_BIN)) ??
+      EMPTY_SEGS;
+    const shade = shadeAt(mid, toSun, world.asteroids, bin, plant.id, p.group);
     if (shade !== p.shade) {
       p.shade = shade;
       plant.version++; // lighting changed -> leaf tint must re-render
@@ -169,6 +182,19 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       plant.growthCooldown = f.growth.actionCooldown * 0.5; // re-check soon
     }
   }
+}
+
+/**
+ * The plant's terraformed substrate bed on its rock: an arc (radians half-
+ * angle) around the anchor that widens as the plant matures. Drives both the
+ * bed rendering and canopy-control territory (M6).
+ */
+export function substrateHalfAngle(plant: Plant): number {
+  const S = TUNING.colony.substrate;
+  const r = Math.max(Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y), 1);
+  const aliveParts = plant.parts.reduce((n, p) => n + (p.dead ? 0 : 1), 0);
+  const arcLen = Math.min(S.baseArc + aliveParts * S.perPart, S.maxArc);
+  return arcLen / r;
 }
 
 export function aliveConeCount(plant: Plant): number {
@@ -278,16 +304,28 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
 }
 
 function autoAim(world: World, plant: Plant, from: Vec2, range: number): Vec2 | null {
+  const toSun = toSunVec(world.sun);
   let best: Vec2 | null = null;
   let bestScore = 0;
   for (const ast of world.asteroids) {
     if (ast.id === plant.asteroidId) continue; // spread out, don't crowd home
     const d = Math.hypot(ast.pos.x - from.x, ast.pos.y - from.y) - ast.radius;
     if (d > range * 0.95) continue;
-    const residents = world.plants.filter(
-      (p) => p.alive && p.asteroidId === ast.id,
-    ).length;
-    let score = ((1 / (1 + residents)) * (ast.rich ? 1.3 : 1) * (1.2 - d / range));
+    let own = 0;
+    let rival = 0;
+    for (const p of world.plants) {
+      if (!p.alive || p.asteroidId !== ast.id) continue;
+      if (p.colonyId === plant.colonyId) own++;
+      else rival++;
+    }
+    // rough anchor capacity of the rock — skip rocks we already saturate
+    const slots = Math.max(
+      2,
+      Math.floor((Math.PI * 2 * ast.radius) / FACTIONS[plant.faction].repro.minSpacing),
+    );
+    if (own >= Math.ceil(slots * 0.5)) continue;
+    let score =
+      ((ast.rich ? 1.35 : 1) * (1.2 - d / range)) / (1 + own * 3 + rival);
     const ping = world.ping;
     if (
       ping &&
@@ -298,9 +336,24 @@ function autoAim(world: World, plant: Plant, from: Vec2, range: number): Vec2 | 
     }
     if (score > bestScore) {
       bestScore = score;
-      // aim inside the disc with a little scatter
-      const jitter = scale(fromAngle(plant.rng.range(0, Math.PI * 2)), ast.radius * 0.4);
-      best = sub(add(ast.pos, jitter), from);
+      // land on the sunlit face, scattered so successive seeds spread out
+      const jitter = scale(fromAngle(plant.rng.range(0, Math.PI * 2)), ast.radius * 0.45);
+      const sunward = scale(toSun, ast.radius * 0.5);
+      best = sub(add(ast.pos, add(sunward, jitter)), from);
+    }
+  }
+  if (best) return best;
+
+  // nothing left to colonize in range: bombard the nearest rival canopy
+  let bestD = range * 0.95;
+  for (const p of world.plants) {
+    if (!p.alive || p.colonyId === plant.colonyId) continue;
+    const crown = add(p.astPos, p.parts[p.trunkTip].tip);
+    const d = Math.hypot(crown.x - from.x, crown.y - from.y);
+    if (d < bestD) {
+      bestD = d;
+      const jitter = scale(fromAngle(plant.rng.range(0, Math.PI * 2)), 15);
+      best = sub(add(crown, jitter), from);
     }
   }
   return best;

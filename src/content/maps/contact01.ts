@@ -11,7 +11,7 @@ export const CONTACT01: MapDef = {
   height: 1800,
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 300 },
   debris: { perMin: 2 },
-  roundSec: 900,
+  roundSec: 600,
   asteroids: [
     { x: -820, y: 200, r: 90 }, // player home
     { x: 820, y: -200, r: 90 }, // rival home

@@ -16,6 +16,7 @@ export interface FactionColors {
   cone: number;
   coneArmed: number;
   seed: number;
+  litter: number; // the terraformed substrate bed on the rock surface
 }
 
 export interface FactionDef {
@@ -110,6 +111,7 @@ export const PINOPHYTA: FactionDef = {
       cone: 0x9a6b3f,
       coneArmed: 0xe8b054,
       seed: 0xd7f59a,
+      litter: 0x4e5a3c, // bed of shed needles
     },
     {
       // "Rustspire" — the rival Pinophyta colony palette
@@ -125,6 +127,7 @@ export const PINOPHYTA: FactionDef = {
       cone: 0x7a4b33,
       coneArmed: 0xff9454,
       seed: 0xffd2a0,
+      litter: 0x5e4634,
     },
   ],
   behavior: {
@@ -155,9 +158,9 @@ export const PINOPHYTA: FactionDef = {
     coneMax: 2,
     coneCost: 8,
     coneEnergy: 30,
-    chargeRate: 1.6,
-    armedAutoFire: 12,
-    aiAutoFire: 2,
+    chargeRate: 2.4,
+    armedAutoFire: 8,
+    aiAutoFire: 3,
     seedSpeed: 95,
     seedRange: 900,
     seedStartEnergy: 35,
@@ -176,7 +179,7 @@ export const PINOPHYTA: FactionDef = {
     upkeep: { heart: 0.15, root: 0.05, stem: 0.06, leaf: 0.1, cone: 0.08 },
   },
   growth: {
-    actionCooldown: 0.6,
+    actionCooldown: 0.45,
     rootMax: 2,
     rootCost: 5,
     rootLen: 14,

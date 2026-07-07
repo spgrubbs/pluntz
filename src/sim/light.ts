@@ -5,6 +5,21 @@ import type { Asteroid, SunState } from './types';
 /** 0 = fully lit, 1 = shaded by canopy (any plant's foliage), 2 = hard rock shadow. */
 export type ShadeLevel = 0 | 1 | 2;
 
+/**
+ * Canopy occluders binned by coordinate perpendicular to the sun ray.
+ * Parallel light means a leaf's shade ray keeps one perpendicular coordinate,
+ * so each shade query only scans the segments in its own narrow band.
+ */
+export const CANOPY_BIN = 40;
+
+export interface CanopyIndex {
+  bins: Map<number, CanopySeg[]>;
+}
+
+export function canopyCross(x: number, y: number, toSun: Vec2): number {
+  return x * toSun.y - y * toSun.x;
+}
+
 /** A world-space leaf segment that casts canopy shade. */
 export interface CanopySeg {
   ax: number;

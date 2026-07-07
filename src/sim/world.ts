@@ -5,7 +5,7 @@ import type { Asteroid, Debris, FactionId, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
 import { FACTIONS } from '../content/factions';
 import { createPlant, stepPlant, damagePart } from './plant';
-import type { CanopySeg } from './light';
+import { canopyCross, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
 import { emit, setEventSink } from './events';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
@@ -67,7 +67,6 @@ export function createWorld(map: MapDef, seed: number): World {
       faction: c.faction,
       isPlayer: c.player ?? false,
       palette: c.palette ?? 0,
-      reserve: 0,
     });
   }
   for (const s of map.spawns) {
@@ -157,26 +156,29 @@ function stepSeeds(world: World, dt: number): void {
   }
 }
 
-/** Thriving plants feed the colony pool; struggling ones draw from it. */
+/**
+ * Root-network energy sharing: plants of one colony whose substrate beds are
+ * near each other (anchor distance < shareRange) equalize energy, richer
+ * feeding poorer. Distant outposts are on their own until the beds spread.
+ */
 function shareColonyEnergy(world: World, dt: number): void {
   const SH = TUNING.colony;
-  for (const plant of world.plants) {
-    if (!plant.alive) continue;
-    const colony = world.colonies.find((c) => c.id === plant.colonyId);
-    if (!colony) continue;
-    const cap = plant.capacity;
-    if (plant.energy > cap * 0.75 && colony.reserve < SH.reserveCap) {
-      const t = Math.min(
-        SH.donateRate * dt,
-        plant.energy - cap * 0.75,
-        SH.reserveCap - colony.reserve,
-      );
-      plant.energy -= t;
-      colony.reserve += t;
-    } else if (plant.energy < cap * 0.35 && colony.reserve > 0) {
-      const t = Math.min(SH.drawRate * dt, colony.reserve, cap * 0.35 - plant.energy);
-      plant.energy += t;
-      colony.reserve -= t;
+  const plants = world.plants;
+  for (let i = 0; i < plants.length; i++) {
+    const A = plants[i];
+    if (!A.alive) continue;
+    const aAnchor = add(A.astPos, A.parts[0].base);
+    for (let j = i + 1; j < plants.length; j++) {
+      const B = plants[j];
+      if (!B.alive || B.colonyId !== A.colonyId) continue;
+      const bAnchor = add(B.astPos, B.parts[0].base);
+      if (dist(aAnchor, bAnchor) > SH.shareRange) continue;
+      const diff = A.energy / A.capacity - B.energy / B.capacity;
+      if (Math.abs(diff) < SH.flowDeadband) continue;
+      const [src, dst] = diff > 0 ? [A, B] : [B, A];
+      const t = Math.min(SH.flowRate * dt, src.energy * 0.5, dst.capacity - dst.energy);
+      src.energy -= t;
+      dst.energy += t;
     }
   }
 }
@@ -190,13 +192,13 @@ export function stepWorld(world: World, dt: number): void {
   }
   if (world.ping && world.time > world.ping.expires) world.ping = null;
 
-  // sudden death: past the round timer the sun fades over 3 minutes
+  // sudden death: past the round timer the sun fades over 2 minutes
   if (world.roundSec > 0 && world.time > world.roundSec) {
-    const t = Math.min((world.time - world.roundSec) / 180, 1);
+    const t = Math.min((world.time - world.roundSec) / 120, 1);
     world.sunFactor = 1 - t * 0.88;
   }
 
-  const canopy = collectCanopy(world);
+  const canopy = collectCanopyIndex(world);
   for (const plant of world.plants) stepPlant(world, plant, dt, canopy);
   shareColonyEnergy(world, dt);
   stepSeeds(world, dt);
@@ -367,26 +369,38 @@ function stepDebris(world: World, dt: number): void {
   }
 }
 
-/** World-space leaf segments from every plant — the canopy occluder set. */
-function collectCanopy(world: World): CanopySeg[] {
-  const segs: CanopySeg[] = [];
+function collectCanopyIndex(world: World): CanopyIndex {
+  const toSun = fromAngle(world.sun.angle);
+  const bins = new Map<number, CanopySeg[]>();
   for (const plant of world.plants) {
     const ast = world.asteroids.find((a) => a.id === plant.asteroidId);
     if (!ast) continue;
     for (const p of plant.parts) {
       if (p.kind !== 'leaf' || p.dead) continue;
       // occlude with the central 70% of the fan — needle tips are porous
-      segs.push({
+      const seg: CanopySeg = {
         ax: ast.pos.x + p.base.x + (p.tip.x - p.base.x) * 0.15,
         ay: ast.pos.y + p.base.y + (p.tip.y - p.base.y) * 0.15,
         bx: ast.pos.x + p.base.x + (p.tip.x - p.base.x) * 0.85,
         by: ast.pos.y + p.base.y + (p.tip.y - p.base.y) * 0.85,
         plantId: plant.id,
         group: p.group,
-      });
+      };
+      const c1 = canopyCross(seg.ax, seg.ay, toSun);
+      const c2 = canopyCross(seg.bx, seg.by, toSun);
+      const k0 = Math.floor(Math.min(c1, c2) / CANOPY_BIN);
+      const k1 = Math.floor(Math.max(c1, c2) / CANOPY_BIN);
+      for (let k = k0; k <= k1; k++) {
+        let arr = bins.get(k);
+        if (!arr) {
+          arr = [];
+          bins.set(k, arr);
+        }
+        arr.push(seg);
+      }
     }
   }
-  return segs;
+  return { bins };
 }
 
 /** Order-stable integer hash of sim state, for determinism tests. */
@@ -420,6 +434,5 @@ export function hashWorld(world: World): number {
     mix(s.pos.x);
     mix(s.pos.y);
   }
-  for (const c of world.colonies) mix(c.reserve * 100);
   return h;
 }

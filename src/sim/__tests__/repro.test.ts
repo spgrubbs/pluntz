@@ -46,16 +46,32 @@ describe('reproduction (M4)', () => {
     expect(sproutAt(w, colonyId, 'pinophyta', ast, Math.PI)).toBe(true); // far side
   });
 
-  it('colony pool: thriving plants feed struggling siblings', () => {
+  it('substrate sharing: a rich neighbor feeds a poor one within range', () => {
     const w = createWorld(TWIN_MAP, 11);
     w.debrisPerMin = 0;
     for (let i = 0; i < 2000; i++) stepWorld(w, TUNING.simDt);
-    const [a, b] = w.plants;
+    const [a, b] = w.plants; // both on rock 0, anchors ~180u apart (< shareRange)
     a.energy = a.capacity; // flush donor
     b.energy = 0;
     // b is at zero but income-positive (it's lit), so no starvation race here
     for (let i = 0; i < 100; i++) stepWorld(w, TUNING.simDt);
     expect(b.energy).toBeGreaterThan(3);
+  });
+
+  it('substrate sharing does NOT reach distant outposts', () => {
+    const w = createWorld(TWIN_MAP, 11);
+    w.debrisPerMin = 0;
+    for (let i = 0; i < 500; i++) stepWorld(w, TUNING.simDt);
+    // plant a far outpost on the second rock (500u away)
+    const colonyId = w.colonies[0].id;
+    expect(sproutAt(w, colonyId, 'pinophyta', w.asteroids[1], Math.PI)).toBe(true);
+    const outpost = w.plants[w.plants.length - 1];
+    w.plants[0].energy = w.plants[0].capacity;
+    outpost.energy = 1;
+    const gained = outpost.energy;
+    // one tick: no sharing link can have fed it (its own income may add a little)
+    stepWorld(w, TUNING.simDt);
+    expect(outpost.energy - gained).toBeLessThan(1); // no 6/s flow jump
   });
 
   it('ping expires after 60 seconds', () => {

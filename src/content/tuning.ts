@@ -24,9 +24,12 @@ export const TUNING = {
   },
 
   colony: {
-    donateRate: 3, // energy/s a thriving plant (>75% full) feeds the pool
-    drawRate: 5, // energy/s a struggling plant (<35%) may pull from it
-    reserveCap: 150,
+    /** Energy flows plant-to-plant only across touching/near substrate beds. */
+    shareRange: 240, // anchors closer than this (same colony) exchange energy
+    flowRate: 6, // energy/s along one sharing link
+    flowDeadband: 0.05, // no flow when fill fractions are this close
+    /** Terraformed substrate bed: arc length on the rock surface per plant. */
+    substrate: { baseArc: 30, perPart: 0.5, maxArc: 85 },
   },
 
   debris: {
