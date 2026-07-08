@@ -11,6 +11,7 @@ export interface GameConfig {
 const FACTION_CHOICES: { id: FactionId; label: string; blurb: string }[] = [
   { id: 'pinophyta', label: '🌲 Pinophyta', blurb: 'patient armored spires · ballistic cones' },
   { id: 'anthophyta', label: '✿ Anthophyta', blurb: 'racing vines · fruit carried by birds' },
+  { id: 'basidiomycota', label: '🍄 Basidiomycota', blurb: 'sunless web · spores infect rivals' },
 ];
 
 /** The front door: map, factions, seed, GROW. */

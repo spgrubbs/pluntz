@@ -37,7 +37,7 @@ async function boot(): Promise<void> {
   // --- World config (URL params seed the menu; menu owns the choice) ----------
   const params = new URLSearchParams(location.search);
   const okFaction = (x: string | null): x is FactionId =>
-    x === 'pinophyta' || x === 'anthophyta';
+    x === 'pinophyta' || x === 'anthophyta' || x === 'basidiomycota';
   const pf = params.get('faction');
   const af = params.get('ai');
   let cfg: GameConfig = {

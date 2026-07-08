@@ -127,7 +127,7 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
 }
 
 const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70 };
-const GRAZE_APPEAL = { anthophyta: 3, pinophyta: 0.4 } as const;
+const GRAZE_APPEAL = { anthophyta: 3, pinophyta: 0.4, basidiomycota: 0.1 } as const;
 
 function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: number): void {
   const want = scale(norm(sub(target, fn.pos)), speed);
@@ -429,7 +429,13 @@ function stepSeeds(world: World, dt: number): void {
         const a = add(plant.astPos, p.base);
         const b = add(plant.astPos, p.tip);
         if (distToSegment(s.pos, a, b) < 5) {
-          damagePart(plant, p.id, 14);
+          if (FACTIONS[s.faction].repro.infects && !p.infected) {
+            p.infected = true; // the spore takes hold — prune it off
+            plant.version++;
+            emit({ type: 'impact', x: s.pos.x, y: s.pos.y, kind: p.kind, power: 4 });
+          } else {
+            damagePart(plant, p.id, 14);
+          }
           hitRival = true;
           break;
         }

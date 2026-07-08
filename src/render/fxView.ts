@@ -142,6 +142,26 @@ export class FxView {
         });
       }
     }
+    // infected parts exhale violet spore motes
+    for (const plant of world.plants) {
+      if (!plant.alive) continue;
+      for (const p of plant.parts) {
+        if (p.dead || !p.infected) continue;
+        if (Math.random() < dt * 1.5) {
+          this.spawn({
+            x: plant.astPos.x + (p.base.x + p.tip.x) / 2,
+            y: plant.astPos.y + (p.base.y + p.tip.y) / 2,
+            vx: this.rand(-6, 6),
+            vy: this.rand(-6, 6),
+            life: 0,
+            maxLife: this.rand(0.8, 1.5),
+            size: 1.5,
+            color: 0xa86ae8,
+            drag: 0.95,
+          });
+        }
+      }
+    }
     // faint drifting dust across the void
     if (Math.random() < dt * 3) {
       this.spawn({

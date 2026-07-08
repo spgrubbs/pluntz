@@ -161,7 +161,9 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
 
   for (const p of plant.parts) {
     if (p.dead && (p.kind === 'leaf' || p.kind === 'cone')) continue; // they drop
-    const dmg = p.dead ? 0 : 1 - p.hp / p.maxHp;
+    if (p.dead && p.maxHp <= 0) continue; // decomposed: the husk has crumbled
+    const dmg = p.dead ? 0 : 1 - p.hp / Math.max(p.maxHp, 1);
+    const INFECT = 0x8a4fd0;
     switch (p.kind) {
       case 'root': {
         const color = p.dead ? HUSK_ROOT : dmg > 0.05 ? lerpColor(c.root, WOUND, dmg * 0.8) : c.root;
@@ -177,6 +179,7 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
         else {
           color = p.hardened ? c.stemOld : c.stem;
           if (dmg > 0.05) color = lerpColor(color, WOUND, dmg * 0.85);
+          if (p.infected) color = lerpColor(color, INFECT, 0.65);
         }
         g.moveTo(p.base.x, p.base.y)
           .lineTo(p.tip.x, p.tip.y)
@@ -194,15 +197,31 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
         break;
       }
       case 'leaf': {
-        const color = starving
+        let color = starving
           ? c.leafStarving
           : p.shade === 0
             ? c.leaf
             : p.shade === 1
               ? c.leafCanopy
               : c.leafShaded;
+        if (p.infected) color = lerpColor(color, INFECT, 0.7);
         const alpha = p.shade === 0 ? 0.95 : p.shade === 1 ? 0.7 : 0.5;
-        if (f.render.leaf === 'broad') {
+        if (f.render.leaf === 'gill') {
+          // a little shelf-fungus fan: trapezoid + gill lines beneath
+          const perp = rot(p.dir, Math.PI / 2);
+          const t1 = add(p.base, scale(p.dir, p.len));
+          g.poly([
+            p.base.x + perp.x * 1.2, p.base.y + perp.y * 1.2,
+            t1.x + perp.x * 3.6, t1.y + perp.y * 3.6,
+            t1.x - perp.x * 3.6, t1.y - perp.y * 3.6,
+            p.base.x - perp.x * 1.2, p.base.y - perp.y * 1.2,
+          ]).fill({ color, alpha });
+          for (const w of [-2, 0, 2]) {
+            g.moveTo(p.base.x + perp.x * w * 0.4, p.base.y + perp.y * w * 0.4)
+              .lineTo(t1.x + perp.x * w, t1.y + perp.y * w)
+              .stroke({ width: 0.7, color: 0x2a1f38, alpha: alpha * 0.7 });
+          }
+        } else if (f.render.leaf === 'broad') {
           // broad leaf: a pointed oval blade with a midrib
           const perp = rot(p.dir, Math.PI / 2);
           const w = p.len * 0.32;
@@ -230,7 +249,24 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
       case 'cone': {
         const frac = Math.min(p.charge / f.repro.coneEnergy, 1);
         const armed = p.armedAt >= 0;
-        if (f.render.repro === 'flower') {
+        if (f.render.repro === 'dome') {
+          // fruiting dome: stipe + glowing cap swelling with charge
+          const capR = 2.2 + frac * 3.6;
+          const at = add(p.base, scale(p.dir, 3 + frac * 3));
+          g.moveTo(p.base.x, p.base.y)
+            .lineTo(at.x, at.y)
+            .stroke({ width: 1.6, color: c.stemOld });
+          const capA = Math.atan2(p.dir.y, p.dir.x);
+          const pts: number[] = [];
+          for (let k = 0; k <= 8; k++) {
+            const a = capA - Math.PI / 2 + (k / 8) * Math.PI;
+            pts.push(at.x + Math.cos(a) * capR, at.y + Math.sin(a) * capR);
+          }
+          g.poly(pts).fill({ color: armed ? c.coneArmed : c.cone });
+          if (armed) {
+            g.circle(at.x, at.y, capR * 0.5).fill({ color: 0xffffff, alpha: 0.5 });
+          }
+        } else if (f.render.repro === 'flower') {
           const at = add(p.base, scale(p.dir, 3));
           if (armed) {
             // ripe fruit: a glossy orb
@@ -267,6 +303,36 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
         break;
       }
       case 'heart': {
+        if (f.render.heart === 'dome') {
+          // the prime dome: a broad mushroom cap, glow = stored energy.
+          // Soft and vital — the web dies with it.
+          const up = plant.up;
+          const capA = Math.atan2(up.y, up.x);
+          const at = add(p.base, scale(up, 6));
+          if (p.dead) {
+            if (p.maxHp > 0) g.circle(at.x, at.y, 9).fill({ color: HUSK_HEART, alpha: 0.7 });
+            break;
+          }
+          const ratio = Math.max(0, Math.min(1, plant.energy / plant.capacity));
+          g.moveTo(p.base.x - up.x * 1, p.base.y - up.y * 1)
+            .lineTo(at.x, at.y)
+            .stroke({ width: 4, color: c.stemOld });
+          const pts: number[] = [];
+          for (let k = 0; k <= 10; k++) {
+            const a = capA - Math.PI / 2 + (k / 10) * Math.PI;
+            pts.push(at.x + Math.cos(a) * 11, at.y + Math.sin(a) * 11);
+          }
+          const body = dmg > 0.05 ? lerpColor(c.heart, WOUND, dmg * 0.7) : c.heart;
+          g.poly(pts).fill({ color: body });
+          // bioluminescent spots brighten with stored energy
+          const glow = starving ? c.leafStarving : c.heartCore;
+          for (const [gx, gy] of [[-5, 3], [0, 6], [5, 3]] as const) {
+            const px = at.x + up.x * gy + -up.y * gx;
+            const py = at.y + up.y * gy + up.x * gx;
+            g.circle(px, py, 1.6 + ratio * 1.6).fill({ color: glow, alpha: 0.3 + ratio * 0.6 });
+          }
+          break;
+        }
         if (f.render.heart === 'bulb') {
           // Anthophyta heartseed: a swollen tuber-bulb, glow = stored energy
           const up = plant.up;

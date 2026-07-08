@@ -23,9 +23,13 @@ export interface FactionDef {
   id: FactionId;
   name: string;
   /** Drawing styles: how parts read on screen. */
-  render: { leaf: 'needle' | 'broad'; heart: 'pinecone' | 'bulb'; repro: 'cone' | 'flower' };
+  render: {
+    leaf: 'needle' | 'broad' | 'gill';
+    heart: 'pinecone' | 'bulb' | 'dome';
+    repro: 'cone' | 'flower' | 'dome';
+  };
   /** In-fiction names for parts, used across the UI. */
-  terms: { leaf: string; leafOne: string; cone: string };
+  terms: { leaf: string; leafOne: string; cone: string; trunk: string };
   /** palettes[0] is the default; extra palettes distinguish same-faction colonies. */
   palettes: FactionColors[];
   /** Static text shown in the inspector's expandable behavior section. */
@@ -34,6 +38,10 @@ export interface FactionDef {
     priorities: { id: IntentId; text: string }[];
   };
   energy: {
+    /** photo = sunlight through leaves; decomp = eats husks, ignores the sun. */
+    mode: 'photo' | 'decomp';
+    /** decomp mode only. */
+    decomp?: { rockTrickle: number; gillIncome: number; huskRate: number; huskYield: number };
     heartInitial: number;
     capBase: number;
     capPerPart: number;
@@ -61,6 +69,8 @@ export interface FactionDef {
   repro: {
     /** ballistic = launched seeds; fauna = ripe fruit carried by Frugivora. */
     style: 'ballistic' | 'fauna';
+    sporeFan?: number; // fire this many seeds in a fan (spore cloud)
+    infects?: boolean; // seeds hitting living rivals infect instead of bruise
     coneMax: number; // simultaneous cones (or flowers)
     coneCost: number; // energy to bud a cone
     coneEnergy: number; // charge needed to arm
@@ -107,7 +117,7 @@ export const PINOPHYTA: FactionDef = {
   id: 'pinophyta',
   name: 'Pinophyta',
   render: { leaf: 'needle', heart: 'pinecone', repro: 'cone' },
-  terms: { leaf: 'needles', leafOne: 'needle', cone: 'seed cone' },
+  terms: { leaf: 'needles', leafOne: 'needle', cone: 'seed cone', trunk: 'trunk' },
   palettes: [
     {
       stem: 0x5d8a5f,
@@ -179,6 +189,7 @@ export const PINOPHYTA: FactionDef = {
     minSpacing: 55,
   },
   energy: {
+    mode: 'photo',
     heartInitial: 45,
     capBase: 60,
     capPerPart: 2,
@@ -223,7 +234,7 @@ export const ANTHOPHYTA: FactionDef = {
   id: 'anthophyta',
   name: 'Anthophyta',
   render: { leaf: 'broad', heart: 'bulb', repro: 'flower' },
-  terms: { leaf: 'leaves', leafOne: 'leaf', cone: 'flower' },
+  terms: { leaf: 'leaves', leafOne: 'leaf', cone: 'flower', trunk: 'runner' },
   palettes: [
     {
       stem: 0x5f9948,
@@ -296,6 +307,7 @@ export const ANTHOPHYTA: FactionDef = {
     minSpacing: 48,
   },
   energy: {
+    mode: 'photo',
     heartInitial: 50,
     capBase: 60,
     capPerPart: 2,
@@ -335,7 +347,129 @@ export const ANTHOPHYTA: FactionDef = {
   },
 };
 
+/** BASIDIOMYCOTA — the anti-sun faction: web, spores, decomposition, dread. */
+export const BASIDIOMYCOTA: FactionDef = {
+  id: 'basidiomycota',
+  name: 'Basidiomycota',
+  render: { leaf: 'gill', heart: 'dome', repro: 'dome' },
+  terms: { leaf: 'gills', leafOne: 'gill', cone: 'fruiting dome', trunk: 'hyphal cord' },
+  palettes: [
+    {
+      stem: 0xcfc8dc, // pale lace
+      stemOld: 0xa89fc0,
+      leaf: 0x9a7ab8,
+      leafCanopy: 0x8a6aa8,
+      leafShaded: 0x7a5a98,
+      leafStarving: 0xd8c34a,
+      root: 0x8a80a0,
+      heart: 0x8a5fb0,
+      heartCore: 0x7ae2ff, // bioluminescent
+      cone: 0xb88ad2,
+      coneArmed: 0x7ae2ff,
+      seed: 0xc9a4ff,
+      litter: 0x4a3a5e, // the creeping web-stain
+    },
+    {
+      // bone-pale rival strain
+      stem: 0xd8d4c4,
+      stemOld: 0xb0ac9a,
+      leaf: 0xb8b090,
+      leafCanopy: 0xa89f80,
+      leafShaded: 0x8a8268,
+      leafStarving: 0xd8c34a,
+      root: 0x9a9280,
+      heart: 0xb0a880,
+      heartCore: 0xa8ffd2,
+      cone: 0xc8bf9a,
+      coneArmed: 0xa8ffd2,
+      seed: 0xe8e0c0,
+      litter: 0x4a4638,
+    },
+  ],
+  behavior: {
+    summary:
+      'The anti-sun clade. Basidiomycota ignore light entirely: the web creeps ' +
+      'across rock, gills sip minerals, and every husk on their rock is food. ' +
+      'Spore bursts are short-ranged, but a spore landing on living rivals ' +
+      'seeds an infection that spreads part to part — prune it off before it ' +
+      'reaches the heart. When the sun fades at round\u2019s end, they accelerate.',
+    priorities: [
+      { id: 'anchor', text: 'Anchor: holdfasts into the rock' },
+      { id: 'needles', text: 'Raise gills along every cord' },
+      { id: 'trunk', text: 'Creep the web across the surface' },
+      { id: 'branches', text: 'Lace side cords outward' },
+      { id: 'cones', text: 'Swell fruiting domes; burst spores at rock and rival' },
+      { id: 'mature', text: 'Mature: digest, drain, endure the dark' },
+    ],
+  },
+  life: {
+    hp: { heart: 40, root: 25, stem: 28, leaf: 8, cone: 12 },
+    hpVariance: 0.2,
+    starveDps: { leaf: 1.0, stem: 0.4, root: 0.4, heart: 1.0, cone: 1.0 },
+    hardenAge: 70,
+    hardenBonus: 6,
+    leafLifespan: [160, 240],
+    pruneRefund: 0.4,
+  },
+  repro: {
+    style: 'ballistic',
+    sporeFan: 3,
+    infects: true,
+    coneMax: 2,
+    coneCost: 6,
+    coneEnergy: 26,
+    chargeRate: 2.0,
+    armedAutoFire: 7,
+    aiAutoFire: 3,
+    seedSpeed: 55,
+    seedRange: 430,
+    seedStartEnergy: 30,
+    minSpacing: 45,
+  },
+  energy: {
+    mode: 'decomp',
+    decomp: { rockTrickle: 0.06, gillIncome: 0.22, huskRate: 3.5, huskYield: 0.9 },
+    heartInitial: 45,
+    capBase: 70,
+    capPerPart: 2,
+    reserve: 4,
+    heartIncome: 0.1,
+    leafIncome: 1, // unused in decomp mode
+    minAngleEff: 0.35,
+    canopyShade: 1, // shade means nothing to them
+    shadeFloor: 1,
+    upkeep: { heart: 0.15, root: 0.04, stem: 0.05, leaf: 0.08, cone: 0.1 },
+  },
+  growth: {
+    style: 'vine',
+    actionCooldown: 0.5,
+    rootMax: 2,
+    rootCost: 4,
+    rootLen: 11,
+    stemCost: 4,
+    leafCost: 4,
+    trunkTarget: 22,
+    trunkSegLen: 6.5,
+    trunkTaper: 0.03,
+    branchEvery: 3,
+    branchStartDepth: 3,
+    branchAngleDeg: 60,
+    branchSegLen: 5.5,
+    branchCurl: 0.05,
+    leafLen: 6,
+    leafAngleDeg: 80,
+    leavesPerTrunkStem: 1,
+    leavesPerBranchStem: 2,
+    wPrevDir: 0.35,
+    wUp: 0.06,
+    wSun: 0,
+    wNoise: 0.06,
+    wTangent: 0.45,
+  },
+};
+
 export const FACTIONS: Record<FactionId, FactionDef> = {
   pinophyta: PINOPHYTA,
   anthophyta: ANTHOPHYTA,
+  basidiomycota: BASIDIOMYCOTA,
 };

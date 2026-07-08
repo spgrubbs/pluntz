@@ -49,6 +49,7 @@ export function createPlant(
     maxAge: 0,
     charge: 0,
     armedAt: -1,
+    infected: false,
     shade: 0,
     group: 0,
   };
@@ -74,6 +75,7 @@ export function createPlant(
     growthCooldown: 0,
     age: 0,
     blessedUntil: 0,
+    infectSpreadAt: 0,
     deathScored: false,
     rng,
     version: 0,
@@ -99,7 +101,8 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   const mods = colonyMods(colony);
   const blessed = world.time < plant.blessedUntil;
 
-  // --- Aging: bark hardening, natural needle drop ----------------------------
+  // --- Aging: bark hardening, natural needle drop, infection rot -------------
+  let anyInfected = false;
   for (const p of plant.parts) {
     if (p.dead) continue;
     p.age += dt;
@@ -108,11 +111,38 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       p.hp += f.life.hardenBonus + mods.hardenBonusAdd;
       p.maxHp += f.life.hardenBonus + mods.hardenBonusAdd;
     }
+    if (p.infected) {
+      anyInfected = true;
+      p.hp -= 0.4 * dt; // the parasite eats quietly (no impact-event spam)
+      if (p.hp <= 0) killPart(plant, p.id);
+    }
     if (p.maxAge > 0 && p.age > p.maxAge) killPart(plant, p.id); // needle drops, slot reopens
   }
 
-  // --- Energy: income from leaves, upkeep from everything -------------------
+  // infection creeps to a neighboring part every few seconds — prune it off
+  if (anyInfected && world.time >= plant.infectSpreadAt) {
+    plant.infectSpreadAt = world.time + 5;
+    outer: for (const p of plant.parts) {
+      if (p.dead || !p.infected) continue;
+      const parent = p.parent >= 0 ? plant.parts[p.parent] : null;
+      if (parent && !parent.dead && !parent.infected) {
+        parent.infected = true;
+        plant.version++;
+        break;
+      }
+      for (const c of plant.parts) {
+        if (!c.dead && !c.infected && c.parent === p.id) {
+          c.infected = true;
+          plant.version++;
+          break outer;
+        }
+      }
+    }
+  }
+
+  // --- Energy: income from light or from death; upkeep from everything ------
   const toSun = toSunVec(world.sun);
+  const decomp = f.energy.mode === 'decomp';
   let income = 0;
   let upkeep = 0;
   let litLeaves = 0;
@@ -120,13 +150,19 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   let shadowLeaves = 0;
   let totalLeaves = 0;
   let aliveParts = 0;
+  let stems = 0;
   for (const p of plant.parts) {
     if (p.dead) continue;
     aliveParts++;
     upkeep += f.energy.upkeep[p.kind];
     if (p.kind === 'heart') income += f.energy.heartIncome;
+    if (p.kind === 'stem') stems++;
     if (p.kind !== 'leaf') continue;
     totalLeaves++;
+    if (decomp) {
+      litLeaves++; // gills never mind the dark
+      continue;
+    }
     const mid = add(asteroid.pos, add(p.base, scale(p.dir, p.len * 0.5)));
     const bin =
       canopy.bins.get(Math.floor(canopyCross(mid.x, mid.y, toSun) / CANOPY_BIN)) ??
@@ -153,6 +189,27 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       world.sunFactor *
       mods.leafIncome *
       (blessed ? TUNING.verbs.blessIncomeMult : 1);
+  }
+  if (decomp && f.energy.decomp) {
+    // saprotroph economy: mineral trickle per cord, digestion per gill, and
+    // any husk on this rock is food. The dying sun feeds them instead.
+    const D = f.energy.decomp;
+    const darkBoost = 1 + (1 - world.sunFactor) * 1.2;
+    income += (stems * D.rockTrickle + totalLeaves * D.gillIncome) * mods.leafIncome * darkBoost;
+    let mouths = 3; // how many husk parts one web digests at once
+    for (const other of world.plants) {
+      if (mouths <= 0) break;
+      if (other.asteroidId !== plant.asteroidId) continue;
+      for (const hp of other.parts) {
+        if (!hp.dead || hp.maxHp <= 0) continue;
+        const bite = Math.min(D.huskRate * dt, hp.maxHp);
+        hp.maxHp -= bite;
+        income += (bite * D.huskYield) / dt;
+        if (hp.maxHp <= 0) other.version++; // consumed: the husk crumbles away
+        if (--mouths <= 0) break;
+      }
+    }
+    income *= blessed ? TUNING.verbs.blessIncomeMult : 1;
   }
   plant.lastIncome = income;
   plant.lastUpkeep = upkeep;
@@ -338,6 +395,7 @@ function growCone(plant: Plant, f: FactionDef, mods: Mods): boolean {
     maxAge: 0,
     charge: 0,
     armedAt: -1,
+    infected: false,
     shade: 0,
     group: stem.group,
   });
@@ -363,15 +421,19 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
   const aim = dir ?? autoAim(world, plant, from, range);
   if (!aim) return false; // hold fire until something is in range (or the player aims)
 
-  world.seeds.push({
-    id: world.nextId++,
-    colonyId: plant.colonyId,
-    faction: plant.faction,
-    pos: { ...from },
-    vel: scale(norm(aim), R.seedSpeed),
-    age: 0,
-    maxAge: range / R.seedSpeed,
-  });
+  const fan = R.sporeFan ?? 1;
+  for (let i = 0; i < fan; i++) {
+    const spread = (i - (fan - 1) / 2) * 0.22;
+    world.seeds.push({
+      id: world.nextId++,
+      colonyId: plant.colonyId,
+      faction: plant.faction,
+      pos: { ...from },
+      vel: scale(rot(norm(aim), spread), R.seedSpeed),
+      age: 0,
+      maxAge: range / R.seedSpeed,
+    });
+  }
   emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });
   killPart(plant, coneId); // spent cone drops; the slot reopens
   return true;
@@ -382,7 +444,8 @@ function autoAim(world: World, plant: Plant, from: Vec2, range: number): Vec2 | 
   let best: Vec2 | null = null;
   let bestScore = 0;
   for (const ast of world.asteroids) {
-    if (ast.id === plant.asteroidId) continue; // spread out, don't crowd home
+    // seed factions spread outward; spore factions also blanket their own rock
+    if (ast.id === plant.asteroidId && !FACTIONS[plant.faction].repro.infects) continue;
     const d = Math.hypot(ast.pos.x - from.x, ast.pos.y - from.y) - ast.radius;
     if (d > range * 0.95) continue;
     let own = 0;
@@ -637,6 +700,7 @@ function addRoot(plant: Plant, f: FactionDef, mods: Mods): void {
     maxAge: 0,
     charge: 0,
     armedAt: -1,
+    infected: false,
     shade: 0,
     group: 0,
   });
@@ -692,6 +756,7 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): void
     maxAge: 0,
     charge: 0,
     armedAt: -1,
+    infected: false,
     shade: 0,
     group: 0,
   });
@@ -746,6 +811,7 @@ function extendBranch(plant: Plant, f: FactionDef, mods: Mods): boolean {
     maxAge: 0,
     charge: 0,
     armedAt: -1,
+    infected: false,
     shade: 0,
     group: 0,
   });
@@ -788,6 +854,7 @@ function addLeaf(plant: Plant, f: FactionDef, mods: Mods): boolean {
       maxAge: plant.rng.range(f.life.leafLifespan[0], f.life.leafLifespan[1]),
       charge: 0,
       armedAt: -1,
+      infected: false,
       shade: 0,
       group: stem.group, // needles share their branch's occlusion group
     });

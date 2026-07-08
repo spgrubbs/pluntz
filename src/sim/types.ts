@@ -2,7 +2,7 @@ import type { Vec2 } from './vec';
 import type { RNG } from './rng';
 import type { ShadeLevel } from './light';
 
-export type FactionId = 'pinophyta' | 'anthophyta';
+export type FactionId = 'pinophyta' | 'anthophyta' | 'basidiomycota';
 
 export type PartKind = 'heart' | 'root' | 'stem' | 'leaf' | 'cone';
 
@@ -51,6 +51,7 @@ export interface Part {
   maxAge: number; // natural lifespan (leaves); 0 = immortal
   charge: number; // cones: energy banked toward a seed
   armedAt: number; // cones: sim time when fully charged, -1 if not
+  infected: boolean; // fungal parasite aboard: DoT + spread; prune it off
   shade: ShadeLevel; // leaves only: last light query result
   /**
    * Occlusion group: needles never shade needles of the same group (a branch
@@ -93,6 +94,7 @@ export interface Plant {
   version: number; // bumped on structural change (render rebuild key)
   // per-tick telemetry for the inspector
   blessedUntil: number; // sim time the Bless buff lapses
+  infectSpreadAt: number; // next time an infected part spreads to a neighbor
   deathScored: boolean; // rivals were paid essence for this plant's death
   lastIncome: number;
   lastUpkeep: number;
