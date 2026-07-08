@@ -386,4 +386,71 @@ touching sim architecture; if they do, that's an architecture bug.
 
 ---
 
-*Next step after this document: M0 scaffold.*
+## 13. Post-M9 Design Directions (playtest-driven; sequencing TBD with the player)
+
+M0–M9 are built and playable. These are the substantial directions raised after the M9
+playtest, recorded here so we can prioritize them one at a time (each is a milestone-sized
+change, not a quick tweak). **Android wrap (M10) is intentionally deferred** — Capacitor
+wraps whatever web build exists, so nothing is lost by polishing first.
+
+### 13.1 Basidiomycota redesign — mycelium first, fruit second *(next up)*
+Today the fungus draws like a plant. It should live mostly **underground**: an unseen
+mycelium that slowly spreads through the *whole* rock (and, given time, wraps to the far
+side, opening flanking play). Only **fruiting bodies** rise from claimed territory — and
+perhaps only in **shade**, which needs care so it isn't degenerate (a fungus that can only
+fruit in the dark vs. a game where light is currency is interesting but easy to break).
+Implementation sketch: model fungal territory as a per-rock **surface-coverage value**
+that creeps outward over time (cheap: an arc that grows), decoupled from the visible part
+graph; fruiting domes spawn at coverage nodes. This also fixes reach (the web crosses the
+rock instead of needing to shoot across the void).
+
+### 13.2 Split the fungal identity into real niches
+"One clade that does detritivore + lithovore + parasite" is muddy. Break it into distinct
+factions/sub-clades, each a clean fantasy:
+- **Detritivore** (saprotroph): eats husks/dead matter; thrives in the aftermath of war.
+- **Lithovore** (rock-eater): mines minerals straight from bare stone; slow, relentless,
+  independent of both light and death.
+- **Parasite** (e.g. *Cuscuta*-style): cannot stand alone — must infect and drain a living
+  host colony; wins from *inside* someone else's empire.
+Current Basidiomycota becomes the **detritivore** anchor; the other two are future factions.
+
+### 13.3 Time-gated Mutations (replaces the always-on trait shop)
+The current trait tree feels low-impact. Replace/augment it with **Mutations**: every
+~2 minutes, *every* colony (and maybe fauna) is offered a choice of **2 dramatic perks**
+that change *mechanics*, not just stats — reactive counterplay, drafted live. Draw
+inspiration from real phylogenetic tricks, e.g.:
+- **Succulent:** pruned leaves become seeds (turn the Prune verb into propagation);
+  CAM "windows" in leaves; water-hoard batteries.
+- **Spines/thorns:** damage or repel fauna that touch you.
+- **Serotiny:** seeds only release after a debris impact / fire.
+- **Allelopathy:** poison the substrate around you so rivals can't root nearby.
+Metaprogression gates the pool: you access **tier-1 options only until you win 1/2/3 rounds**
+with that faction, then deeper tiers unlock. Other unlocks: **palette swaps**, faction
+cosmetics. (Metaprogression store: extend the localStorage save with a `profile` blob.)
+
+### 13.4 Richer fauna ecology
+- **Satiety + harder bites + wandering + curved flight + working Lure**: done in M9.1.
+- **New neutral actors** that change the environment, not just eat it:
+  - **Scarab/dung-beetle** — slowly *pushes an asteroid*, redrawing the light map and
+    territory adjacencies (a moving board).
+  - **Spider** — nests inside a plant and *kills other fauna* that come near (rent-a-guard;
+    who does it protect?).
+  - **Pollinator upgrades**, carrion-eaters that race the detritivore for husks, etc.
+
+### 13.5 Atmosphere & the indifferent void
+The game should feel larger and less controllable:
+- **Fog of war / unexplored space**: reveal only near your colony + your fauna; distant
+  rocks are rumor until a seed or bird reaches them. (Render-only mask — does not touch sim
+  determinism; sim always simulates the whole map.)
+- **Bigger maps** with more happening off-screen: drifting derelict husks, spore storms,
+  wandering megafauna, debris fields — events you react to, not cause.
+- Sound/music pass for mood (procedural, same manifest pattern as art).
+
+### 13.6 Done in M9.1
+Debris-riding seeds/spores; collapsible non-blocking verb tray; fauna behavior overhaul;
+fungal spore reach.
+
+---
+
+*Current state: M0–M9 shipped + M9.1 polish. Next candidate: §13.1 (fungal mycelium redesign)
+or §13.3 (time-gated Mutations) — player to choose.*
