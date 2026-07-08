@@ -62,7 +62,7 @@ describe('Anthophyta & fauna (M7)', () => {
     grazer.state = 'graze';
     grazer.targetPlant = plant.id;
     grazer.targetPart = leaf.id;
-    grazer.timer = 20;
+    grazer.satiety = 0.2; // hungry
     grazer.pos = {
       x: plant.astPos.x + leaf.tip.x,
       y: plant.astPos.y + leaf.tip.y,
@@ -70,6 +70,41 @@ describe('Anthophyta & fauna (M7)', () => {
     const hp0 = leaf.hp;
     run(w, 20); // 2s of nibbling
     expect(leaf.dead || leaf.hp < hp0).toBe(true);
+  });
+
+  it('a lure pulls a grazing beetle off its current meal', () => {
+    const w = createWorld(GARDEN, 7);
+    w.debrisPerMin = 0;
+    // two rocks with vines so there is somewhere else to be lured to
+    run(w, 1500);
+    const grazer = w.fauna.find((f) => f.kind === 'phytophaga')!;
+    const home = w.plants[0];
+    // force it grazing the home plant
+    grazer.state = 'graze';
+    grazer.targetPlant = home.id;
+    grazer.satiety = 0.2;
+    grazer.pos = { ...home.astPos };
+    // drop a lure far away, off toward rock 2
+    const far = w.asteroids[2];
+    placeLure(w, w.colonies[0].id, far.pos);
+    run(w, 200); // 20s
+    // it should have abandoned home and be near the lured rock (or grazing there)
+    expect(Math.hypot(grazer.pos.x - far.pos.x, grazer.pos.y - far.pos.y)).toBeLessThan(
+      Math.hypot(home.astPos.x - far.pos.x, home.astPos.y - far.pos.y),
+    );
+  });
+
+  it('a stuffed grazer stops eating and wanders off', () => {
+    const w = createWorld(GARDEN, 7);
+    w.debrisPerMin = 0;
+    run(w, 1500);
+    const grazer = w.fauna.find((f) => f.kind === 'phytophaga')!;
+    const home = w.plants[0];
+    grazer.state = 'graze';
+    grazer.targetPlant = home.id;
+    grazer.satiety = 0.98; // nearly full
+    run(w, 40); // it tops off then must leave
+    expect(grazer.state).toBe('wander');
   });
 
   it('lure costs essence and places the scent marker', () => {

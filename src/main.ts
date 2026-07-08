@@ -252,11 +252,24 @@ async function boot(): Promise<void> {
   const traitBtn = document.createElement('button');
   traitBtn.textContent = '⬡ evolve';
   traitBtn.addEventListener('click', () => traitPanel.toggle());
-  actionBar.appendChild(traitBtn);
-  actionBar.appendChild(lureBtn);
-  actionBar.appendChild(blessBtn);
-  actionBar.appendChild(pingBtn);
-  actionBar.appendChild(pruneBtn);
+  // verbs live in a collapsible tray so they never cover the inspector
+  const verbTray = document.createElement('div');
+  verbTray.className = 'verb-tray';
+  verbTray.append(traitBtn, lureBtn, blessBtn, pingBtn, pruneBtn);
+  const trayToggle = document.createElement('button');
+  trayToggle.className = 'tray-toggle';
+  let trayOpen = true;
+  const syncTray = (): void => {
+    verbTray.classList.toggle('collapsed', !trayOpen);
+    trayToggle.textContent = trayOpen ? '▾ acts' : '▸ acts';
+    trayToggle.classList.toggle('active', trayOpen);
+  };
+  trayToggle.addEventListener('click', () => {
+    trayOpen = !trayOpen;
+    syncTray();
+  });
+  actionBar.append(verbTray, trayToggle);
+  syncTray();
   document.getElementById('ui')!.appendChild(actionBar);
   camera.x = homeAst.pos.x;
   camera.y = homeAst.pos.y - 60;

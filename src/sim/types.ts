@@ -143,6 +143,7 @@ export interface Seed {
   vel: Vec2;
   age: number;
   maxAge: number; // range / speed
+  riding: number; // debris id it has mounted, -1 = flying free
 }
 
 export interface Ping {
@@ -170,6 +171,8 @@ export interface Fauna {
   timer: number;
   hp: number;
   maxHp: number;
+  satiety: number; // 0 hungry .. 1 full; grazers leave when full, return when hungry
+  wander: number; // per-individual lateral wander phase (curved flight)
   /** Idle flight rides orbits around rocks (looks celestial, is cheap). */
   orbit: { ast: number; r: number; a: number; dir: number } | null;
 }

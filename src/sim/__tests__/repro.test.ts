@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createWorld, stepWorld, sproutAt, setPing } from '../world';
+import { createWorld, stepWorld, sproutAt, setPing, spawnDebris } from '../world';
 import { DEV01 } from '../../content/maps/dev01';
 import { TUNING } from '../../content/tuning';
 import type { MapDef } from '../types';
@@ -72,6 +72,36 @@ describe('reproduction (M4)', () => {
     // one tick: no sharing link can have fed it (its own income may add a little)
     stepWorld(w, TUNING.simDt);
     expect(outpost.energy - gained).toBeLessThan(1); // no 6/s flow jump
+  });
+
+  it('a seed can ride drifting debris and colonize where it crashes', () => {
+    const w = createWorld(DEV01, 7);
+    w.debrisPerMin = 0;
+    w.debris.length = 0;
+    const target = w.asteroids[3]; // some far rock
+    // a debris drifting toward that rock, and a seed placed on the debris
+    const from = { x: target.pos.x - 400, y: target.pos.y };
+    const speed = 90;
+    const vx = ((target.pos.x - from.x) / 400) * speed;
+    const vy = ((target.pos.y - from.y) / 400) * speed;
+    spawnDebris(w, from, { x: vx, y: vy }, 10);
+    const rock = w.debris[0];
+    const before = w.plants.length;
+    w.seeds.push({
+      id: w.nextId++,
+      colonyId: w.colonies[0].id,
+      faction: 'pinophyta',
+      pos: { x: rock.pos.x, y: rock.pos.y },
+      vel: { x: 0, y: 0 },
+      age: 0,
+      maxAge: 0.1, // would fizzle almost immediately if it weren't riding
+      riding: -1,
+    });
+    // the seed's own maxAge (0.1s) would fizzle it in flight; only by mounting
+    // the debris and riding to impact can it reach and colonize the far rock
+    for (let i = 0; i < 400 && w.plants.length === before; i++) stepWorld(w, TUNING.simDt);
+    expect(w.plants.length).toBeGreaterThan(before);
+    expect(w.plants[w.plants.length - 1].asteroidId).toBe(target.id);
   });
 
   it('ping expires after 60 seconds', () => {

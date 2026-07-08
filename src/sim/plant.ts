@@ -432,6 +432,7 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
       vel: scale(rot(norm(aim), spread), R.seedSpeed),
       age: 0,
       maxAge: range / R.seedSpeed,
+      riding: -1,
     });
   }
   emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });

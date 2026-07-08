@@ -109,6 +109,8 @@ export function createWorld(map: MapDef, seed: number): World {
         timer: rng.range(2, 8),
         hp,
         maxHp: hp,
+        satiety: rng.range(0, 0.3),
+        wander: rng.range(0, Math.PI * 2),
         orbit: null,
       });
     }
@@ -136,6 +138,63 @@ function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: nu
   fn.vel.y += (want.y - fn.vel.y) * k;
   fn.pos.x += fn.vel.x * dt;
   fn.pos.y += fn.vel.y * dt;
+}
+
+/**
+ * Steer toward a target but along a lazy curved path rather than a beeline:
+ * the desired heading is nudged sideways by a slow sine, so approach arcs read
+ * as unhurried, animal wandering. `time` keeps it deterministic.
+ */
+function steerCurved(
+  fn: import('./types').Fauna,
+  target: Vec2,
+  speed: number,
+  dt: number,
+  time: number,
+  swayAmt = 0.6,
+): void {
+  const to = sub(target, fn.pos);
+  const d = len(to);
+  const dir = norm(to);
+  // less sway when close, so they actually arrive
+  const sway = Math.sin(time * 0.9 + fn.wander) * swayAmt * Math.min(d / 200, 1);
+  const heading = { x: dir.x - dir.y * sway, y: dir.y + dir.x * sway };
+  const want = scale(norm(heading), speed);
+  const k = Math.min(3 * dt, 1);
+  fn.vel.x += (want.x - fn.vel.x) * k;
+  fn.vel.y += (want.y - fn.vel.y) * k;
+  fn.pos.x += fn.vel.x * dt;
+  fn.pos.y += fn.vel.y * dt;
+}
+
+/** How appealing is `plant` to a grazer at distance `d`, lure included? */
+function grazeScore(world: World, plant: import('./types').Plant, d: number): number {
+  const lured =
+    world.lure &&
+    Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 340;
+  let score = (GRAZE_APPEAL[plant.faction] * plant.totalLeaves) / (60 + d * 0.05);
+  if (lured) score += 1000; // the scent overrides ordinary appetite
+  return score;
+}
+
+/** The tastiest reachable plant right now (used to (re)target and to bail). */
+function bestGrazeTarget(world: World, fn: import('./types').Fauna): import('./types').Plant | null {
+  let target: import('./types').Plant | null = null;
+  let best = 1.2; // apathy threshold
+  for (const plant of world.plants) {
+    if (!plant.alive || plant.totalLeaves < 3) continue;
+    const d = dist(fn.pos, plant.astPos);
+    const lured =
+      world.lure &&
+      Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 340;
+    if (d > 900 && !lured) continue;
+    const score = grazeScore(world, plant, d);
+    if (score > best) {
+      best = score;
+      target = plant;
+    }
+  }
+  return target;
 }
 
 /**
@@ -205,6 +264,47 @@ function findRipeFruit(
   return best;
 }
 
+/**
+ * Pick a rock for a carrying Frugivora to deliver to: rootable ground the
+ * carrier colony doesn't already saturate, not already the destination of
+ * another delivering bird (so a flock spreads out), biased to riches and the
+ * colony's lure.
+ */
+function chooseDeliveryRock(
+  world: World,
+  bird: import('./types').Fauna,
+): import('./types').Asteroid | null {
+  let dest: import('./types').Asteroid | null = null;
+  let bestScore = 0;
+  for (const ast of world.asteroids) {
+    let own = 0;
+    for (const pl of world.plants) {
+      if (pl.alive && pl.asteroidId === ast.id && pl.colonyId === bird.carryColony) own++;
+    }
+    const slots = Math.max(2, Math.floor((Math.PI * 2 * ast.radius) / 48));
+    if (own >= Math.ceil(slots * 0.5)) continue;
+    // how many other birds are already inbound with the same colony's seed?
+    let inbound = 0;
+    for (const o of world.fauna) {
+      if (o !== bird && o.state === 'deliver' && o.targetAst === ast.id) inbound++;
+    }
+    let score =
+      ((ast.rich ? 1.3 : 1) + world.rng.next() * 0.3) / (1 + own * 2 + inbound * 4);
+    if (
+      world.lure &&
+      world.lure.colonyId === bird.carryColony &&
+      Math.hypot(world.lure.x - ast.pos.x, world.lure.y - ast.pos.y) < ast.radius + 200
+    ) {
+      score *= 30;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      dest = ast;
+    }
+  }
+  return dest;
+}
+
 function stepFauna(world: World, dt: number): void {
   if (world.lure && world.time > world.lure.expires) world.lure = null;
   for (const fn of world.fauna) {
@@ -226,35 +326,14 @@ function stepFauna(world: World, dt: number): void {
             break;
           }
           const at = { x: plant.astPos.x + part.tip.x, y: plant.astPos.y + part.tip.y };
-          steer(fn, at, FAUNA_SPEED.frugivora, dt);
+          steerCurved(fn, at, FAUNA_SPEED.frugivora, dt, world.time);
           if (dist(fn.pos, at) < 15) {
             killPart(plant, part.id); // fruit plucked
             fn.carryColony = plant.colonyId;
             fn.carryFaction = plant.faction;
-            // choose a delivery rock: prefer near the carrier colony's lure,
-            // else an unsaturated rock anywhere on the map
-            let dest = null as import('./types').Asteroid | null;
-            let bestScore = 0;
-            for (const ast of world.asteroids) {
-              let own = 0;
-              for (const pl of world.plants) {
-                if (pl.alive && pl.asteroidId === ast.id && pl.colonyId === fn.carryColony) own++;
-              }
-              const slots = Math.max(2, Math.floor((Math.PI * 2 * ast.radius) / 48));
-              if (own >= Math.ceil(slots * 0.5)) continue;
-              let score = (ast.rich ? 1.3 : 1) / (1 + own * 2) + world.rng.next() * 0.3;
-              if (
-                world.lure &&
-                world.lure.colonyId === fn.carryColony &&
-                Math.hypot(world.lure.x - ast.pos.x, world.lure.y - ast.pos.y) < ast.radius + 160
-              ) {
-                score *= 30; // deliveries all but obey the scent
-              }
-              if (score > bestScore) {
-                bestScore = score;
-                dest = ast;
-              }
-            }
+            // choose a delivery rock: unsaturated ground, not already targeted
+            // by another delivering bird, biased to the carrier's lure/riches
+            const dest = chooseDeliveryRock(world, fn);
             if (dest) {
               fn.targetAst = dest.id;
               fn.state = 'deliver';
@@ -270,7 +349,7 @@ function stepFauna(world: World, dt: number): void {
             fn.state = 'wander';
             break;
           }
-          steer(fn, ast.pos, FAUNA_SPEED.frugivora, dt);
+          steerCurved(fn, ast.pos, FAUNA_SPEED.frugivora, dt, world.time);
           const d = dist(fn.pos, ast.pos);
           if (d < ast.radius + 18) {
             const angle = Math.atan2(fn.pos.y - ast.pos.y, fn.pos.x - ast.pos.x);
@@ -284,52 +363,46 @@ function stepFauna(world: World, dt: number): void {
         break;
       }
       case 'phytophaga': {
+        // digest between meals: a full grazer wanders and does other things
+        fn.satiety = Math.max(0, fn.satiety - dt / 60); // fully digests in ~60s
         if (fn.state === 'wander') {
           faunaWanderTick(world, fn, dt);
-          // sniff for the tastiest garden (lure trumps everything)
-          let target: import('./types').Plant | null = null;
-          let bestScore = 1.5; // apathy threshold
-          for (const plant of world.plants) {
-            if (!plant.alive || plant.totalLeaves < 4) continue;
-            const d = dist(fn.pos, plant.astPos);
-            const luredHere =
-              world.lure &&
-              Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 300;
-            if (d > 900 && !luredHere) continue;
-            let score = (GRAZE_APPEAL[plant.faction] * plant.totalLeaves) / (60 + d * 0.05);
-            if (
-              world.lure &&
-              Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 300
-            ) {
-              score = 1000 + score; // the scent is irresistible
+          // only hunt when hungry — unless a lure is out, which always tempts
+          const hungry = fn.satiety < 0.6 || !!world.lure;
+          if (hungry) {
+            const target = bestGrazeTarget(world, fn);
+            if (target) {
+              fn.state = 'graze';
+              fn.targetPlant = target.id;
+              fn.targetPart = -1;
             }
-            if (score > bestScore) {
-              bestScore = score;
-              target = plant;
-            }
-          }
-          if (target) {
-            fn.state = 'graze';
-            fn.targetPlant = target.id;
-            fn.targetPart = -1;
-            fn.timer = 22; // grazing session length
           }
         } else if (fn.state === 'graze') {
           const plant = world.plants.find((p) => p.id === fn.targetPlant);
-          fn.timer -= dt;
-          if (!plant || !plant.alive || fn.timer <= 0) {
+          // leave when sated, when the plant's gone, or when a fresh lure calls
+          // it somewhere better (re-evaluated every tick, not just on entry)
+          const better = bestGrazeTarget(world, fn);
+          if (fn.satiety >= 0.97 || !plant || !plant.alive || plant.totalLeaves === 0) {
             fn.state = 'wander';
-            fn.timer = 0;
+            fn.targetPart = -1;
+            // sated grazers scatter: pick a fresh far waypoint
+            faunaWanderTick(world, fn, dt);
             break;
           }
-          let leaf = fn.targetPart >= 0 ? plant.parts[fn.targetPart] : undefined;
+          // stick with the current meal until full — except a lure yanks it
+          // to a better target immediately (that's the whole point of Lure)
+          if (world.lure && better && better.id !== plant.id) {
+            fn.targetPlant = better.id;
+            fn.targetPart = -1;
+          }
+          const cur = world.plants.find((p) => p.id === fn.targetPlant)!;
+          let leaf = fn.targetPart >= 0 ? cur.parts[fn.targetPart] : undefined;
           if (!leaf || leaf.dead || leaf.kind !== 'leaf') {
-            // pick the nearest living leaf
             let bestD = Infinity;
             leaf = undefined;
-            for (const p of plant.parts) {
+            for (const p of cur.parts) {
               if (p.dead || p.kind !== 'leaf') continue;
-              const at = { x: plant.astPos.x + p.tip.x, y: plant.astPos.y + p.tip.y };
+              const at = { x: cur.astPos.x + p.tip.x, y: cur.astPos.y + p.tip.y };
               const d = dist(fn.pos, at);
               if (d < bestD) {
                 bestD = d;
@@ -342,9 +415,12 @@ function stepFauna(world: World, dt: number): void {
             }
             fn.targetPart = leaf.id;
           }
-          const at = { x: plant.astPos.x + leaf.tip.x, y: plant.astPos.y + leaf.tip.y };
+          const at = { x: cur.astPos.x + leaf.tip.x, y: cur.astPos.y + leaf.tip.y };
           steer(fn, at, FAUNA_SPEED.phytophaga, dt);
-          if (dist(fn.pos, at) < 12) damagePart(plant, leaf.id, 2.5 * dt);
+          if (dist(fn.pos, at) < 14) {
+            damagePart(cur, leaf.id, 6 * dt); // grazers bite hard now
+            fn.satiety = Math.min(1, fn.satiety + dt / 14); // a full meal ~14s
+          }
         }
         break;
       }
@@ -411,6 +487,21 @@ export function setPing(world: World, colonyId: number, pos: Vec2): void {
 function stepSeeds(world: World, dt: number): void {
   for (let i = world.seeds.length - 1; i >= 0; i--) {
     const s = world.seeds[i];
+
+    // riding a drifting rock: follow it (the debris step handles the landing)
+    if (s.riding >= 0) {
+      const rock = world.debris.find((d) => d.id === s.riding);
+      if (!rock) {
+        // the rock is gone and we weren't sprouted with it — a lost seed
+        emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+        world.seeds.splice(i, 1);
+        continue;
+      }
+      s.pos.x = rock.pos.x;
+      s.pos.y = rock.pos.y;
+      continue;
+    }
+
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
     s.age += dt;
@@ -419,6 +510,17 @@ function stepSeeds(world: World, dt: number): void {
       world.seeds.splice(i, 1);
       continue;
     }
+    // mount a drifting rock whose path it crosses — hitch a long ride
+    let mounted = false;
+    for (const d of world.debris) {
+      if (dist(s.pos, d.pos) < d.radius + 6) {
+        s.riding = d.id;
+        emit({ type: 'sprout', x: s.pos.x, y: s.pos.y, faction: s.faction });
+        mounted = true;
+        break;
+      }
+    }
+    if (mounted) continue;
     // hardened seeds are slow cannonballs: they bruise rival growth they hit
     let hitRival = false;
     for (const plant of world.plants) {
@@ -763,6 +865,7 @@ function stepDebris(world: World, dt: number): void {
     d.pos.y += d.vel.y * dt;
     d.angle += d.spin * dt;
     if (Math.abs(d.pos.x) > boundX || Math.abs(d.pos.y) > boundY) {
+      dropRiders(world, d.id, null); // riders lost to the void
       world.debris.splice(i, 1);
       continue;
     }
@@ -792,12 +895,30 @@ function stepDebris(world: World, dt: number): void {
       for (const a of world.asteroids) {
         if (dist(d.pos, a.pos) < d.radius + a.radius) {
           emit({ type: 'shatter', x: d.pos.x, y: d.pos.y, power: d.radius });
+          dropRiders(world, d.id, a); // any hitching seeds make landfall here
           destroyed = true;
           break;
         }
       }
     }
     if (destroyed) world.debris.splice(i, 1);
+  }
+}
+
+/** Resolve seeds riding a doomed debris: sprout on `ast`, else fizzle. */
+function dropRiders(world: World, debrisId: number, ast: import('./types').Asteroid | null): void {
+  for (let i = world.seeds.length - 1; i >= 0; i--) {
+    const s = world.seeds[i];
+    if (s.riding !== debrisId) continue;
+    if (ast) {
+      const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
+      const ok = sproutAt(world, s.colonyId, s.faction, ast, angle);
+      const at = add(ast.pos, scale(fromAngle(angle), ast.radius));
+      emit({ type: ok ? 'seedLand' : 'seedFizzle', x: at.x, y: at.y, faction: s.faction });
+    } else {
+      emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+    }
+    world.seeds.splice(i, 1);
   }
 }
 

@@ -91,6 +91,7 @@ describe('Basidiomycota (M8)', () => {
       vel: { x: 0, y: 55 },
       age: 0,
       maxAge: 6,
+      riding: -1,
     });
     run(w, 40);
     const infected = (): number =>
