@@ -1,10 +1,22 @@
 import type { MapDef } from '../../sim/types';
 import { DEV01 } from './dev01';
 import { CONTACT01 } from './contact01';
+import { C01_FIRST_LIGHT, C03_GLOOMFALL } from './campaign';
 
 export const MAPS: Record<string, MapDef> = {
-  dev01: DEV01,
+  c01: C01_FIRST_LIGHT,
   contact01: CONTACT01,
+  c03: C03_GLOOMFALL,
+  dev01: DEV01,
 };
 
-export const DEFAULT_MAP = 'contact01';
+export const DEFAULT_MAP = 'c01';
+
+/** Menu ordering + display grouping ('skirmish' resolves via the generator). */
+export const MAP_CHOICES: { id: string; label: string; group: string }[] = [
+  { id: 'c01', label: 'I · First Light', group: 'campaign' },
+  { id: 'contact01', label: 'II · First Contact', group: 'campaign' },
+  { id: 'c03', label: 'III · Gloomfall', group: 'campaign' },
+  { id: 'skirmish', label: '∞ Skirmish (random)', group: 'skirmish' },
+  { id: 'dev01', label: 'Seedfall Reach (sandbox)', group: 'sandbox' },
+];

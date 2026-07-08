@@ -6,7 +6,7 @@ import type { MapDef } from '../../sim/types';
  */
 export const CONTACT01: MapDef = {
   id: 'contact01',
-  name: 'First Contact',
+  name: 'II · First Contact',
   width: 2600,
   height: 1800,
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 300 },

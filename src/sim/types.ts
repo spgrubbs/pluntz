@@ -227,6 +227,12 @@ export interface MapDef {
   roundSec?: number;
   canopyWin?: { share: number; holdSec: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
-  colonies: { name: string; faction: FactionId; player?: boolean; palette?: number }[];
+  colonies: {
+    name: string;
+    faction: FactionId;
+    player?: boolean;
+    palette?: number;
+    lockFaction?: boolean; // campaign maps: this colony's clade is the story
+  }[];
   spawns: { asteroid: number; anchorDeg: number; colony: number }[];
 }

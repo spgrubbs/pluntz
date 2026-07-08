@@ -5,9 +5,9 @@ of geometric space plants competing for directional sunlight across scattered as
 
 - **Design:** [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) — the living GDD that drives all iterations.
 - **Stack:** TypeScript + Vite + PixiJS, deployed to Vercel for testing, wrapped with Capacitor for Android.
-- **Status:** M7.1 — start menu with faction/map/seed select, surface-anchored
-  plants and territory, tappable fauna riding orbits, verb particle bursts, and
-  a general juice pass. Two factions, strategy layer, living fauna.
+- **Status:** M9 — three factions (Pinophyta / Anthophyta / Basidiomycota), a
+  3-map campaign, seeded skirmish generator, and save/resume. All graphics are
+  procedural by design — no hand-drawn assets planned.
 
 ## Development
 
@@ -22,7 +22,27 @@ npm run build    # typecheck + production bundle in dist/
 
 **URL params:** `?seed=123` fixes the world seed (also shown in the debug panel).
 
-## Current test script (M7.1)
+## Current test script (M8-M9)
+
+1. **Campaign:** the menu lists I·First Light (gentle), II·First Contact, and
+   III·Gloomfall — where an established fungal empire holds a crescent of rocks.
+   Gloomfall's antagonist is always Basidiomycota; your clade is your choice.
+2. **Basidiomycota (playable):** pick 🍄 in the menu. The web creeps across rock
+   ignoring the sun; gills digest minerals; every husk on your rock is food (watch
+   dead wood erode and crumble). Fruiting domes burst 3-spore fans — short-ranged,
+   and they can blanket your own rock. A spore striking living rivals **infects**:
+   violet rot spreads part to part until pruned off. When the sun fades at round's
+   end, your income accelerates while everyone else starves.
+3. **Skirmish:** ∞ Skirmish generates a fair random map from the seed — same seed,
+   same map, shareable via URL.
+4. **Save/resume:** the round autosaves every 10s; close the tab, come back, hit
+   ↻ RESUME GARDEN — the sim continues bit-identically (verified by hash in tests).
+5. **AI/verb feedback (M7.2):** seeds only fly at rocks with genuinely rootable
+   ground; ping is near-absolute and armed cones answer it in ~1.5s; lure is
+   irresistible; fauna are bigger, orbit with wobble and whimsy, and everything
+   glows (additive particles, shockwave rings).
+
+## Earlier scripts (M7.1)
 
 1. **Menu:** the game opens on a start menu — pick map, your clade, the rival's
    clade, and a seed, then GROW. (Reopen via the debug panel's *menu* button or

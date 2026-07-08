@@ -1,5 +1,5 @@
 import type { FactionId } from '../sim/types';
-import { MAPS } from '../content/maps/index';
+import { MAPS, MAP_CHOICES } from '../content/maps/index';
 
 export interface GameConfig {
   mapId: string;
@@ -19,7 +19,11 @@ export class Menu {
   private el: HTMLElement;
   private cfg: GameConfig;
 
-  constructor(initial: GameConfig, onStart: (cfg: GameConfig) => void) {
+  constructor(
+    initial: GameConfig,
+    onStart: (cfg: GameConfig) => void,
+    private onResume?: () => boolean,
+  ) {
     this.cfg = { ...initial };
     const el = document.createElement('div');
     el.className = 'menu open';
@@ -27,7 +31,8 @@ export class Menu {
       <div class="menu-card">
         <h1>PLUNTZ</h1>
         <p class="menu-sub">a small vulnerable sapling in a large dynamic void</p>
-        <div class="menu-section"><span>map</span><div class="menu-row maps"></div></div>
+        <button class="resume" style="display:none">↻ RESUME GARDEN</button>
+        <div class="menu-section"><span>map</span><div class="menu-col maps"></div></div>
         <div class="menu-section"><span>your clade</span><div class="menu-row pf"></div></div>
         <div class="menu-section rival-row"><span>rival clade</span><div class="menu-row af"></div></div>
         <div class="menu-section">
@@ -43,16 +48,20 @@ export class Menu {
     this.el = el;
 
     const mapsRow = el.querySelector('.maps')!;
-    for (const [id, m] of Object.entries(MAPS)) {
+    for (const mc of MAP_CHOICES) {
       const b = document.createElement('button');
-      b.textContent = m.name;
-      b.dataset.id = id;
+      b.textContent = mc.label;
+      b.dataset.id = mc.id;
       b.addEventListener('click', () => {
-        this.cfg.mapId = id;
+        this.cfg.mapId = mc.id;
         this.sync();
       });
       mapsRow.appendChild(b);
     }
+    const resumeBtn = el.querySelector('.resume') as HTMLElement;
+    resumeBtn.addEventListener('click', () => {
+      if (this.onResume?.()) this.hide();
+    });
     for (const [row, key] of [
       ['.pf', 'playerFaction'],
       ['.af', 'aiFaction'],
@@ -96,9 +105,18 @@ export class Menu {
     el.querySelectorAll<HTMLElement>('.af button').forEach((b) =>
       b.classList.toggle('active', b.dataset.id === this.cfg.aiFaction),
     );
-    // sandbox maps have no rival colony
-    const hasRival = (MAPS[this.cfg.mapId]?.colonies.length ?? 1) > 1;
+    // sandbox maps have no rival colony; skirmish always has one
+    const hasRival =
+      this.cfg.mapId === 'skirmish' || (MAPS[this.cfg.mapId]?.colonies.length ?? 1) > 1;
     (el.querySelector('.rival-row') as HTMLElement).style.display = hasRival ? '' : 'none';
+    // resume only when a garden is stored
+    let hasSave = false;
+    try {
+      hasSave = !!localStorage.getItem('pluntz.save');
+    } catch {
+      hasSave = false;
+    }
+    (el.querySelector('.resume') as HTMLElement).style.display = hasSave ? '' : 'none';
   }
 
   show(): void {

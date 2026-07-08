@@ -5,6 +5,8 @@ import { setEventSink } from './sim/events';
 import type { Asteroid, FactionId, MapDef, Plant, World } from './sim/types';
 import { add, dist, norm, scale, sub, fromAngle, type Vec2 } from './sim/vec';
 import { MAPS, DEFAULT_MAP } from './content/maps/index';
+import { generateSkirmish } from './content/maps/gen';
+import { worldToSave, worldFromSave, type SavedWorld } from './sim/serialize';
 import { TUNING } from './content/tuning';
 import { FACTIONS } from './content/factions';
 import { Starfield } from './render/starfield';
@@ -40,8 +42,9 @@ async function boot(): Promise<void> {
     x === 'pinophyta' || x === 'anthophyta' || x === 'basidiomycota';
   const pf = params.get('faction');
   const af = params.get('ai');
+  const urlMap = params.get('map') ?? '';
   let cfg: GameConfig = {
-    mapId: MAPS[params.get('map') ?? ''] ? params.get('map')! : DEFAULT_MAP,
+    mapId: MAPS[urlMap] || urlMap === 'skirmish' ? urlMap : DEFAULT_MAP,
     playerFaction: okFaction(pf) ? pf : 'pinophyta',
     aiFaction: okFaction(af) ? af : 'pinophyta',
     seed: params.get('seed') ? Number(params.get('seed')) >>> 0 : (Date.now() % 0xfffff) >>> 0,
@@ -49,9 +52,11 @@ async function boot(): Promise<void> {
   let seed = cfg.seed;
   let map: MapDef = buildMap(cfg);
   function buildMap(c: GameConfig): MapDef {
-    const m: MapDef = JSON.parse(JSON.stringify(MAPS[c.mapId] ?? MAPS[DEFAULT_MAP]));
+    const base = c.mapId === 'skirmish' ? generateSkirmish(c.seed) : (MAPS[c.mapId] ?? MAPS[DEFAULT_MAP]);
+    const m: MapDef = JSON.parse(JSON.stringify(base));
     for (const col of m.colonies) {
-      col.faction = col.player ? c.playerFaction : c.aiFaction;
+      if (col.player) col.faction = c.playerFaction;
+      else if (!col.lockFaction) col.faction = c.aiFaction;
     }
     return m;
   }
@@ -309,12 +314,59 @@ async function boot(): Promise<void> {
     app.stage.addChildAt(starfield.container, 0);
   }
 
+  // --- Save / resume ---------------------------------------------------------------
+  const SAVE_KEY = 'pluntz.save';
+  let lastSaveAt = 0;
+  function trySave(): void {
+    try {
+      localStorage.setItem(
+        SAVE_KEY,
+        JSON.stringify({ cfg, world: worldToSave(world) }),
+      );
+    } catch {
+      /* storage may be unavailable; play on */
+    }
+  }
+  function clearSave(): void {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  function tryResume(): boolean {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw) as { cfg: GameConfig; world: SavedWorld };
+      cfg = saved.cfg;
+      seed = cfg.seed;
+      map = buildMap(cfg);
+      world = worldFromSave(saved.world);
+      setEventSink(world.events);
+      playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
+      aiming = null;
+      bannerShown = false;
+      banner.classList.remove('open');
+      inspector.hide();
+      app.stage.removeChild(starfield.container);
+      starfield = new Starfield(world.width, world.height, world.seed);
+      app.stage.addChildAt(starfield.container, 0);
+      lastSaveAt = world.time;
+      speed = 1;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Start menu -----------------------------------------------------------------
   const menu = new Menu(cfg, (chosen) => {
     cfg = chosen;
     seed = cfg.seed;
     map = buildMap(cfg);
     resetWorld(false);
+    lastSaveAt = 0;
     speed = 1;
     const qs = new URLSearchParams({
       map: cfg.mapId,
@@ -323,7 +375,7 @@ async function boot(): Promise<void> {
       seed: String(cfg.seed),
     });
     history.replaceState(null, '', `?${qs.toString()}`);
-  });
+  }, tryResume);
   if (!params.get('play')) speed = 0; // hold the sim while the menu is up
   else menu.hide();
 
@@ -371,6 +423,7 @@ async function boot(): Promise<void> {
 
     if (world.roundState !== 'playing' && !bannerShown) {
       bannerShown = true;
+      clearSave(); // finished gardens don't resume
       const t = fmtTime(world.endedAt);
       const rival = world.colonies.find((c) => !c.isPlayer)?.name ?? 'the rival';
       const won = world.roundState === 'won';
@@ -463,6 +516,12 @@ async function boot(): Promise<void> {
     inspector.update(world);
     traitPanel.update();
     updateRoundUi();
+
+    // autosave every 10 sim-seconds while a round is live
+    if (world.roundState === 'playing' && world.time - lastSaveAt >= 10) {
+      lastSaveAt = world.time;
+      trySave();
+    }
 
     panel.update({
       fps: fpsEma,
