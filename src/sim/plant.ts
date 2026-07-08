@@ -1,11 +1,12 @@
 import type { Vec2 } from './vec';
-import { add, sub, scale, norm, rot, dot, fromAngle, segsIntersect, DEG } from './vec';
+import { add, sub, scale, norm, rot, dot, dist, fromAngle, segsIntersect, DEG } from './vec';
 import { makeRng } from './rng';
 import type { Asteroid, Part, PartKind, Plant, World, FactionId } from './types';
 import { FACTIONS, type FactionDef } from '../content/factions';
 import { TUNING } from '../content/tuning';
 import {
   shadeAt,
+  isLit,
   toSunVec,
   canopyCross,
   CANOPY_BIN,
@@ -201,8 +202,10 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       }
     } else if (p.armedAt >= 0) {
       // fauna-style fruit waits for a Frugivora; the timer is only the
-      // self-drop fallback, so it's forgiving
-      const delay = colony && !colony.isPlayer ? R.aiAutoFire : R.armedAutoFire;
+      // self-drop fallback, so it's forgiving. An active ping makes armed
+      // cones answer the shepherd almost immediately.
+      let delay = colony && !colony.isPlayer ? R.aiAutoFire : R.armedAutoFire;
+      if (world.ping && world.ping.colonyId === plant.colonyId) delay = Math.min(delay, 1.5);
       if (world.time - p.armedAt > delay) fireCone(world, plant, p.id, null);
     }
   }
@@ -243,6 +246,27 @@ export function substrateHalfAngle(plant: Plant): number {
   const aliveParts = plant.parts.reduce((n, p) => n + (p.dead ? 0 : 1), 0);
   const arcLen = Math.min(S.baseArc + aliveParts * S.perPart, S.maxArc);
   return arcLen / r;
+}
+
+/** Can a seed of this faction take root at this angle? (bed + spacing rule) */
+export function canRootAt(
+  world: World,
+  ast: Asteroid,
+  angleRad: number,
+  faction: FactionId,
+): boolean {
+  const R = FACTIONS[faction].repro;
+  const seedHalf = (TUNING.colony.substrate.baseArc * 0.5) / ast.radius;
+  const anchor = add(ast.pos, scale(fromAngle(angleRad), ast.radius));
+  for (const pl of world.plants) {
+    if (!pl.alive || pl.asteroidId !== ast.id) continue;
+    let gap = Math.abs(angleRad - pl.anchorAngle) % (Math.PI * 2);
+    if (gap > Math.PI) gap = Math.PI * 2 - gap;
+    if (gap < substrateHalfAngle(pl) + seedHalf) return false;
+    const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
+    if (dist(anchor, other) < R.minSpacing) return false;
+  }
+  return true;
 }
 
 export function aliveConeCount(plant: Plant): number {
@@ -368,28 +392,42 @@ function autoAim(world: World, plant: Plant, from: Vec2, range: number): Vec2 | 
       if (p.colonyId === plant.colonyId) own++;
       else rival++;
     }
-    // rough anchor capacity of the rock — skip rocks we already saturate
-    const slots = Math.max(
-      2,
-      Math.floor((Math.PI * 2 * ast.radius) / FACTIONS[plant.faction].repro.minSpacing),
-    );
-    if (own >= Math.ceil(slots * 0.5)) continue;
+    // sample landing angles: only rocks with genuinely rootable ground count,
+    // and the shot goes at a real free spot (sunlit if possible)
+    const samples = 10;
+    const a0 = plant.rng.range(0, Math.PI * 2);
+    let freeCount = 0;
+    let landAngle: number | null = null;
+    let landLit = false;
+    for (let k = 0; k < samples; k++) {
+      const a = a0 + (k / samples) * Math.PI * 2;
+      if (!canRootAt(world, ast, a, plant.faction)) continue;
+      freeCount++;
+      const point = add(ast.pos, scale(fromAngle(a), ast.radius + 6));
+      const lit = isLit(point, toSun, world.asteroids);
+      if (landAngle === null || (lit && !landLit)) {
+        landAngle = a;
+        landLit = lit;
+      }
+    }
+    if (freeCount === 0 || landAngle === null) continue; // nothing can root here
     let score =
-      ((ast.rich ? 1.35 : 1) * (1.2 - d / range)) / (1 + own * 3 + rival);
+      ((ast.rich ? 1.35 : 1) *
+        (1.2 - d / range) *
+        Math.sqrt(freeCount / samples) *
+        (landLit ? 1 : 0.4)) /
+      (1 + own * 1.5 + rival * 0.5);
     const ping = world.ping;
     if (
       ping &&
       ping.colonyId === plant.colonyId &&
       Math.hypot(ping.x - ast.pos.x, ping.y - ast.pos.y) < ast.radius + 130
     ) {
-      score *= 5;
+      score *= 25; // the shepherd pointed HERE
     }
     if (score > bestScore) {
       bestScore = score;
-      // land on the sunlit face, scattered so successive seeds spread out
-      const jitter = scale(fromAngle(plant.rng.range(0, Math.PI * 2)), ast.radius * 0.45);
-      const sunward = scale(toSun, ast.radius * 0.5);
-      best = sub(add(ast.pos, add(sunward, jitter)), from);
+      best = sub(add(ast.pos, scale(fromAngle(landAngle), ast.radius + 2)), from);
     }
   }
   if (best) return best;

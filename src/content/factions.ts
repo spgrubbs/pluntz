@@ -24,6 +24,8 @@ export interface FactionDef {
   name: string;
   /** Drawing styles: how parts read on screen. */
   render: { leaf: 'needle' | 'broad'; heart: 'pinecone' | 'bulb'; repro: 'cone' | 'flower' };
+  /** In-fiction names for parts, used across the UI. */
+  terms: { leaf: string; leafOne: string; cone: string };
   /** palettes[0] is the default; extra palettes distinguish same-faction colonies. */
   palettes: FactionColors[];
   /** Static text shown in the inspector's expandable behavior section. */
@@ -105,6 +107,7 @@ export const PINOPHYTA: FactionDef = {
   id: 'pinophyta',
   name: 'Pinophyta',
   render: { leaf: 'needle', heart: 'pinecone', repro: 'cone' },
+  terms: { leaf: 'needles', leafOne: 'needle', cone: 'seed cone' },
   palettes: [
     {
       stem: 0x5d8a5f,
@@ -220,6 +223,7 @@ export const ANTHOPHYTA: FactionDef = {
   id: 'anthophyta',
   name: 'Anthophyta',
   render: { leaf: 'broad', heart: 'bulb', repro: 'flower' },
+  terms: { leaf: 'leaves', leafOne: 'leaf', cone: 'flower' },
   palettes: [
     {
       stem: 0x5f9948,
@@ -280,7 +284,7 @@ export const ANTHOPHYTA: FactionDef = {
   },
   repro: {
     style: 'fauna',
-    coneMax: 3,
+    coneMax: 2,
     coneCost: 6,
     coneEnergy: 24,
     chargeRate: 2.2,
@@ -314,10 +318,10 @@ export const ANTHOPHYTA: FactionDef = {
     trunkTarget: 20,
     trunkSegLen: 7.5,
     trunkTaper: 0.05,
-    branchEvery: 3,
-    branchStartDepth: 4,
-    branchAngleDeg: 55,
-    branchSegLen: 6,
+    branchEvery: 2,
+    branchStartDepth: 3,
+    branchAngleDeg: 74,
+    branchSegLen: 7.5,
     branchCurl: 0.1,
     leafLen: 8.5,
     leafAngleDeg: 75,

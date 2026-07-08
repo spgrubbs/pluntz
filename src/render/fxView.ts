@@ -26,6 +26,28 @@ export class FxView {
   private ps: Particle[] = [];
   private rand = (a: number, b: number): number => a + Math.random() * (b - a);
 
+  constructor() {
+    this.g.blendMode = 'add'; // everything glows — Reassembly-style
+  }
+
+  /** A crisp expanding shockwave ring of particles. */
+  private ring(x: number, y: number, count: number, color: number, speed: number, life: number): void {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      this.spawn({
+        x,
+        y,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        life: 0,
+        maxLife: life,
+        size: 1.8,
+        color,
+        drag: 0.9,
+      });
+    }
+  }
+
   ingest(events: SimEvent[]): void {
     for (const e of events) {
       switch (e.type) {
@@ -36,20 +58,27 @@ export class FxView {
         case 'partDied': {
           const pal = e.faction ? FACTIONS[e.faction].palettes[0] : null;
           if (e.kind === 'leaf') this.burst(e.x, e.y, 4, pal?.leafShaded ?? 0x2e8f66, 22, 0.8);
-          else if (e.kind === 'heart') {
+          else if (e.kind === 'cone') {
+            // plucked fruit / spent cone: petals or scales scatter
+            this.burst(e.x, e.y, 7, pal?.cone ?? 0x9a6b3f, 35, 0.9);
+          } else if (e.kind === 'heart') {
+            this.ring(e.x, e.y, 22, pal?.heartCore ?? 0xffd257, 85, 0.9);
             this.burst(e.x, e.y, 16, pal?.heartCore ?? 0xffd257, 55, 1.4);
             this.burst(e.x, e.y, 10, pal?.leaf ?? 0x3ee89c, 35, 1.8);
           } else this.burst(e.x, e.y, 5, 0x8a6d4f, 30, 0.7);
           break;
         }
         case 'shatter':
-          this.burst(e.x, e.y, 6 + (e.power ?? 6) * 0.5, 0x8a8f9c, 45, 0.6);
+          this.ring(e.x, e.y, 10, 0xb9c0cf, 70, 0.4);
+          this.burst(e.x, e.y, 8 + (e.power ?? 6) * 0.7, 0x8a8f9c, 50, 0.7);
           break;
         case 'seedLaunch':
+          this.ring(e.x, e.y, 10, 0xf5eecb, 60, 0.35);
           this.burst(e.x, e.y, 6, 0xf5eecb, 35, 0.5);
           break;
         case 'seedLand':
         case 'sprout':
+          this.ring(e.x, e.y, 12, 0x9df5c4, 55, 0.5);
           this.burst(e.x, e.y, 8, 0xcfc4a8, 30, 0.6); // dust
           this.burst(e.x, e.y, 6, 0x9df5c4, 25, 1.1); // green spark
           break;
@@ -60,14 +89,17 @@ export class FxView {
           this.burst(e.x, e.y, 2, 0xaef5cf, 12, 0.5);
           break;
         case 'bless':
+          this.ring(e.x, e.y, 16, 0xffd257, 70, 0.7);
           this.burst(e.x, e.y, 18, 0xffd257, 45, 1.6);
           this.burst(e.x, e.y, 8, 0xfff2c9, 20, 2.2);
           break;
         case 'ping':
-          this.burst(e.x, e.y, 12, 0x69d2ff, 55, 1.0);
+          this.ring(e.x, e.y, 14, 0x69d2ff, 90, 0.6);
+          this.burst(e.x, e.y, 8, 0x69d2ff, 40, 1.0);
           break;
         case 'lure':
-          this.burst(e.x, e.y, 14, 0xff8ac2, 50, 1.2);
+          this.ring(e.x, e.y, 14, 0xff8ac2, 80, 0.7);
+          this.burst(e.x, e.y, 10, 0xff8ac2, 40, 1.2);
           break;
       }
     }

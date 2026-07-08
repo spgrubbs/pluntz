@@ -129,7 +129,7 @@ export class Inspector {
       <div class="stat-row"><span>energy</span><b data-ref="energy"></b></div>
       <div class="bar"><div data-ref="bar"></div></div>
       <div class="stat-row"><span>net energy</span><b data-ref="net"></b></div>
-      <div class="stat-row"><span>needles</span><b data-ref="needles"></b></div>
+      <div class="stat-row"><span>${f.terms.leaf}</span><b data-ref="needles"></b></div>
       <div class="stat-row"><span>wounds</span><b data-ref="wounds"></b></div>
       <details data-ref="secBehavior">
         <summary>behavior — what &amp; why</summary>
@@ -137,14 +137,14 @@ export class Inspector {
         <ol class="prio">${prios}</ol>
         <div class="stat-row"><span>trunk</span><b data-ref="trunk"></b></div>
         <div class="stat-row"><span>branches</span><b data-ref="branches"></b></div>
-        <div class="stat-row"><span>open needle slots</span><b data-ref="slots"></b></div>
+        <div class="stat-row"><span>open ${f.terms.leafOne} slots</span><b data-ref="slots"></b></div>
       </details>
       <details data-ref="secEnergy">
         <summary>energy detail</summary>
-        <div class="stat-row"><span>needle income</span><b data-ref="leafIncome"></b></div>
+        <div class="stat-row"><span>${f.terms.leafOne} income</span><b data-ref="leafIncome"></b></div>
         <div class="stat-row"><span>heartseed trickle</span><b data-ref="heartIncome"></b></div>
         <div class="stat-row"><span>upkeep: stems</span><b data-ref="upStems"></b></div>
-        <div class="stat-row"><span>upkeep: needles</span><b data-ref="upLeaves"></b></div>
+        <div class="stat-row"><span>upkeep: ${f.terms.leaf}</span><b data-ref="upLeaves"></b></div>
         <div class="stat-row"><span>upkeep: heart + roots</span><b data-ref="upCore"></b></div>
         <div class="stat-row"><span>parts / age</span><b data-ref="parts"></b></div>
       </details>`;

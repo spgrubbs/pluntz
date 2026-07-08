@@ -53,11 +53,11 @@ export function plantStatus(world: World, plant: Plant): PlantStatus {
     cost = g.rootCost;
   } else if (deficit > 0) {
     intent = 'needles';
-    aim = `sprouting needles — ${deficit} open slot${deficit === 1 ? '' : 's'}`;
+    aim = `sprouting ${f.terms.leaf} — ${deficit} open slot${deficit === 1 ? '' : 's'}`;
     cost = g.leafCost;
   } else if (plant.trunkSegs < trunkTarget) {
     intent = 'trunk';
-    aim = `raising the trunk toward the sun (${plant.trunkSegs}/${trunkTarget})`;
+    aim = `extending the ${FACTIONS[plant.faction].growth.style === 'vine' ? 'runner' : 'trunk'} toward the sun (${plant.trunkSegs}/${trunkTarget})`;
     cost = g.stemCost;
   } else if (budsActive > 0) {
     intent = 'branches';
@@ -69,18 +69,21 @@ export function plantStatus(world: World, plant: Plant): PlantStatus {
     const charging = cones.filter((p) => p.armedAt < 0);
     if (armed) {
       intent = 'cones';
-      aim = 'seed cone armed — drag from it to aim, or it fires itself';
+      aim =
+        f.repro.style === 'fauna'
+          ? 'fruit is ripe — waiting for a Frugivora (or it drops nearby)'
+          : `${f.terms.cone} armed — drag from it to aim, or it fires itself`;
       cost = 0;
     } else if (charging.length > 0) {
       intent = 'cones';
       const pct = Math.round(
         (Math.max(...charging.map((p) => p.charge)) / f.repro.coneEnergy) * 100,
       );
-      aim = `ripening a seed cone (${pct}%)`;
+      aim = `ripening a ${f.terms.cone} (${pct}%)`;
       cost = 0;
     } else if (aliveConeCount(plant) < f.repro.coneMax) {
       intent = 'cones';
-      aim = 'budding a seed cone';
+      aim = `budding a ${f.terms.cone}`;
       cost = f.repro.coneCost;
     } else {
       intent = 'mature';
@@ -101,7 +104,7 @@ export function plantStatus(world: World, plant: Plant): PlantStatus {
     const shadedOut = plant.totalLeaves > 0 && plant.litLeaves === 0;
     warning =
       plant.energy <= 0.5
-        ? `starving — growth stalled${shadedOut ? ' (no needle sees the sun)' : ''}`
+        ? `starving — growth stalled${shadedOut ? ` (no ${f.terms.leafOne} sees the sun)` : ''}`
         : `upkeep exceeds income — drawing reserves${shadedOut ? ' (fully shaded)' : ''}`;
   }
 

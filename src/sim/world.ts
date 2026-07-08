@@ -8,7 +8,7 @@ import { createPlant, stepPlant, damagePart, killPart } from './plant';
 import { canopyCross, isLit, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
 import { emit, setEventSink } from './events';
 import { colonyMods, buyTrait } from './stats';
-import { substrateHalfAngle } from './plant';
+import { substrateHalfAngle, canRootAt } from './plant';
 import { AI_TRAIT_ORDER } from '../content/traits';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
@@ -78,6 +78,7 @@ export function createWorld(map: MapDef, seed: number): World {
       isPlayer: c.player ?? false,
       palette: c.palette ?? 0,
       essence: TUNING.essence.starting,
+      rockAwards: 0,
       traits: [],
       instincts: { expand: 0.5, vertical: 0.5 },
     });
@@ -154,15 +155,24 @@ function faunaWanderTick(world: World, fn: import('./types').Fauna, dt: number):
     };
     fn.timer = world.rng.range(9, 18);
   }
-  const speed = FAUNA_SPEED[fn.kind] * 0.65;
+  // per-individual character: different cruising speeds, wobbling orbits,
+  // and the occasional whimsical dart off-course
+  const speed = FAUNA_SPEED[fn.kind] * 0.65 * (0.75 + (fn.id % 7) * 0.09);
   const ast = world.asteroids.find((a) => a.id === fn.orbit!.ast);
   if (!ast) {
     fn.orbit = null;
     return;
   }
   fn.orbit.a += (fn.orbit.dir * speed * dt) / fn.orbit.r;
-  const target = add(ast.pos, scale(fromAngle(fn.orbit.a), fn.orbit.r));
+  const wobble = 1 + 0.22 * Math.sin(world.time * (0.5 + (fn.id % 5) * 0.17) + fn.id);
+  const target = add(ast.pos, scale(fromAngle(fn.orbit.a), fn.orbit.r * wobble));
   steer(fn, target, speed * 1.5, dt);
+  if (world.rng.next() < dt * 0.12) {
+    // a sudden fancy takes it
+    const dart = fromAngle(world.rng.range(0, Math.PI * 2));
+    fn.vel.x += dart.x * speed * 1.6;
+    fn.vel.y += dart.y * speed * 1.6;
+  }
 }
 
 /** Ripe fruit (armed fauna-style cones) not yet claimed by another bird. */
@@ -238,7 +248,7 @@ function stepFauna(world: World, dt: number): void {
                 world.lure.colonyId === fn.carryColony &&
                 Math.hypot(world.lure.x - ast.pos.x, world.lure.y - ast.pos.y) < ast.radius + 160
               ) {
-                score *= 6;
+                score *= 30; // deliveries all but obey the scent
               }
               if (score > bestScore) {
                 bestScore = score;
@@ -282,13 +292,16 @@ function stepFauna(world: World, dt: number): void {
           for (const plant of world.plants) {
             if (!plant.alive || plant.totalLeaves < 4) continue;
             const d = dist(fn.pos, plant.astPos);
-            if (d > 900) continue;
+            const luredHere =
+              world.lure &&
+              Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 300;
+            if (d > 900 && !luredHere) continue;
             let score = (GRAZE_APPEAL[plant.faction] * plant.totalLeaves) / (60 + d * 0.05);
             if (
               world.lure &&
-              Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 260
+              Math.hypot(world.lure.x - plant.astPos.x, world.lure.y - plant.astPos.y) < 300
             ) {
-              score *= 8;
+              score = 1000 + score; // the scent is irresistible
             }
             if (score > bestScore) {
               bestScore = score;
@@ -372,15 +385,7 @@ export function sproutAt(
   // spacing rule = territory rule: a seed cannot take root inside any living
   // plant's substrate bed (the visible litter arc), nor closer than the
   // faction's hard minimum. Mature plants therefore guard more ground.
-  const seedHalf = (TUNING.colony.substrate.baseArc * 0.5) / ast.radius;
-  for (const pl of world.plants) {
-    if (!pl.alive || pl.asteroidId !== ast.id) continue;
-    let gap = Math.abs(angleRad - pl.anchorAngle) % (Math.PI * 2);
-    if (gap > Math.PI) gap = Math.PI * 2 - gap;
-    if (gap < substrateHalfAngle(pl) + seedHalf) return false;
-    const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
-    if (dist(anchor, other) < R.minSpacing) return false;
-  }
+  if (!canRootAt(world, ast, angleRad, faction)) return false;
   const hadRock = world.plants.some(
     (pl) => pl.alive && pl.colonyId === colonyId && pl.asteroidId === ast.id,
   );
@@ -388,7 +393,11 @@ export function sproutAt(
   const colony = world.colonies.find((c) => c.id === colonyId);
   plant.energy = R.seedStartEnergy + colonyMods(colony).seedlingEnergyAdd;
   world.plants.push(plant);
-  if (!hadRock && colony) colony.essence += TUNING.essence.newRockBonus;
+  if (!hadRock && colony) {
+    // diminishing returns: sprawling factions can't farm essence via sheer spread
+    colony.essence += colony.rockAwards < 4 ? TUNING.essence.newRockBonus : 1;
+    colony.rockAwards++;
+  }
   emit({ type: 'sprout', x: anchor.x, y: anchor.y, faction });
   return true;
 }

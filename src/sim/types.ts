@@ -126,6 +126,7 @@ export interface Colony {
   isPlayer: boolean;
   palette: number; // index into the faction's palette list
   essence: number; // the strategic currency: traits & strong verbs
+  rockAwards: number; // fresh-rock essence bonuses already paid (diminishing)
   traits: string[]; // owned trait ids (see content/traits.ts)
   /** Autonomous-policy sliders, both 0..1. */
   instincts: { expand: number; vertical: number };

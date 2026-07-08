@@ -21,28 +21,37 @@ export class FaunaView {
       ];
       switch (fn.kind) {
         case 'frugivora': {
-          // a kite bird: two swept wings
-          const flap = Math.sin(world.time * 9 + fn.id) * 3;
-          g.poly([...P(7, 0), ...P(-5, -5 - flap), ...P(-2, 0)]).fill({ color: 0xc2c9dd });
-          g.poly([...P(7, 0), ...P(-5, 5 + flap), ...P(-2, 0)]).fill({ color: 0x9aa3bd });
+          // a kite bird: two swept wings, tail feather, and an eye
+          const flap = Math.sin(world.time * 9 + fn.id) * 5.5;
+          g.poly([...P(13, 0), ...P(-9, -9 - flap), ...P(-4, 0)]).fill({ color: 0xc2c9dd });
+          g.poly([...P(13, 0), ...P(-9, 9 + flap), ...P(-4, 0)]).fill({ color: 0x9aa3bd });
+          g.poly([...P(-4, 0), ...P(-12, -2.5), ...P(-12, 2.5)]).fill({ color: 0x848daa });
+          g.circle(...P(8, 0), 1.4).fill({ color: 0x2a3046 });
           if (fn.carryFaction) {
-            g.circle(...P(-6, 0), 2.6).fill({ color: 0xffd9a0 }); // the carried seed
+            g.circle(...P(-10, 0), 4).fill({ color: 0xffd9a0 }); // the carried seed
+            g.circle(...P(-10, 0), 5.5).stroke({ width: 1, color: 0xffd9a0, alpha: 0.5 });
           }
           break;
         }
         case 'phytophaga': {
-          // rounded beetle with nibbling mandibles
-          g.circle(fn.pos.x, fn.pos.y, 5).fill({ color: 0x9aa3bd });
-          g.circle(...P(3, 0), 2.8).fill({ color: 0x767f99 });
-          const nib = fn.state === 'graze' ? Math.sin(world.time * 14) * 1.5 : 0;
-          g.moveTo(...P(5, -1.5 - nib)).lineTo(...P(8, -2.5 - nib)).stroke({ width: 1, color: 0x555e78 });
-          g.moveTo(...P(5, 1.5 + nib)).lineTo(...P(8, 2.5 + nib)).stroke({ width: 1, color: 0x555e78 });
+          // rounded beetle with shell seam and nibbling mandibles
+          g.circle(fn.pos.x, fn.pos.y, 9).fill({ color: 0x9aa3bd });
+          g.moveTo(...P(-8, 0)).lineTo(...P(6, 0)).stroke({ width: 1, color: 0x767f99 });
+          g.circle(...P(6, 0), 5).fill({ color: 0x767f99 });
+          const nib = fn.state === 'graze' ? Math.sin(world.time * 14) * 2.5 : 0;
+          g.moveTo(...P(9, -2.5 - nib)).lineTo(...P(14, -4.5 - nib)).stroke({ width: 1.6, color: 0x555e78 });
+          g.moveTo(...P(9, 2.5 + nib)).lineTo(...P(14, 4.5 + nib)).stroke({ width: 1.6, color: 0x555e78 });
+          // stubby legs
+          for (const lx of [-5, 0, 5]) {
+            g.moveTo(...P(lx, -8)).lineTo(...P(lx - 2, -11)).stroke({ width: 1.2, color: 0x555e78 });
+            g.moveTo(...P(lx, 8)).lineTo(...P(lx - 2, 11)).stroke({ width: 1.2, color: 0x555e78 });
+          }
           break;
         }
         case 'anthophila': {
           const tw = 0.6 + 0.4 * Math.sin(world.time * 7 + fn.id * 2);
-          g.circle(fn.pos.x, fn.pos.y, 3.5).fill({ color: 0xdde6fa, alpha: 0.25 * tw });
-          g.circle(fn.pos.x, fn.pos.y, 1.6).fill({ color: 0xdde6fa, alpha: 0.9 });
+          g.circle(fn.pos.x, fn.pos.y, 5.5).fill({ color: 0xdde6fa, alpha: 0.25 * tw });
+          g.circle(fn.pos.x, fn.pos.y, 2.4).fill({ color: 0xdde6fa, alpha: 0.9 });
           break;
         }
       }
