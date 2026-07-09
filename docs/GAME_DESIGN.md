@@ -393,7 +393,7 @@ playtest, recorded here so we can prioritize them one at a time (each is a miles
 change, not a quick tweak). **Android wrap (M10) is intentionally deferred** — Capacitor
 wraps whatever web build exists, so nothing is lost by polishing first.
 
-### 13.1 Basidiomycota redesign — mycelium first, fruit second *(next up)*
+### 13.1 Basidiomycota redesign — mycelium first, fruit second *(shipped)*
 Today the fungus draws like a plant. It should live mostly **underground**: an unseen
 mycelium that slowly spreads through the *whole* rock (and, given time, wraps to the far
 side, opening flanking play). Only **fruiting bodies** rise from claimed territory — and
@@ -403,6 +403,15 @@ Implementation sketch: model fungal territory as a per-rock **surface-coverage v
 that creeps outward over time (cheap: an arc that grows), decoupled from the visible part
 graph; fruiting domes spawn at coverage nodes. This also fixes reach (the web crosses the
 rock instead of needing to shoot across the void).
+
+**As shipped:** `Plant.myco.half` is the coverage arc (radians around the anchor; π = the
+whole rock, ~4 min for a mid rock). The arc *is* the territory: it blocks rival rooting,
+counts for canopy control, and drives income (`tricklePerLen` per claimed arc-length,
+boosted in the dying sun) plus husk digestion (`huskRate`/`huskYield`). Domes surface
+anywhere on the claimed arc, *preferring* shade (not requiring it — dodges the degenerate
+case). Renders as a web-stain + woven lace threaded under the rock surface with glowing
+questing tips at the edges; the heart is a buried knot, not a cap. Infection can no longer
+creep into a heart, so Prune always remains a full cure.
 
 ### 13.2 Split the fungal identity into real niches
 "One clade that does detritivore + lithovore + parasite" is muddy. Break it into distinct
@@ -452,5 +461,5 @@ fungal spore reach.
 
 ---
 
-*Current state: M0–M9 shipped + M9.1 polish. Next candidate: §13.1 (fungal mycelium redesign)
-or §13.3 (time-gated Mutations) — player to choose.*
+*Current state: M0–M9 shipped + M9.1 polish + §13.1 (fungal mycelium redesign). In
+progress: §13.3 (time-gated Mutations + metaprogression).*

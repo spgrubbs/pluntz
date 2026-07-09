@@ -83,6 +83,10 @@ export interface Plant {
   buds: BranchBud[];
   budCursor: number;
   vineSide: number; // vine factions: which way the runner wraps (-1/1)
+  /** Fungal factions: the underground network as an angular half-width around
+   * the anchor. Grows over time toward PI (the whole rock, far side included).
+   * Territory, income and dome placement all read from this. */
+  myco: { half: number } | null;
   energy: number;
   capacity: number;
   rootCount: number;

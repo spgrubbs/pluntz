@@ -20,6 +20,7 @@ export interface Mods {
   contactDealt: number;
   contactTaken: number;
   volatileSeeds: boolean;
+  mycoRateMult: number; // mycelium spread speed multiplier
 }
 
 export const DEFAULT_MODS: Mods = {
@@ -38,6 +39,7 @@ export const DEFAULT_MODS: Mods = {
   contactDealt: 1,
   contactTaken: 1,
   volatileSeeds: false,
+  mycoRateMult: 1,
 };
 
 export function colonyMods(colony: Colony | undefined): Mods {

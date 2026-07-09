@@ -555,6 +555,10 @@ async function boot(): Promise<void> {
       return world;
     },
     camera,
+    /** Fast-forward n sim ticks (automation/testing only). */
+    stepMany(n: number) {
+      for (let i = 0; i < n; i++) stepWorld(world, TUNING.simDt);
+    },
   };
 }
 

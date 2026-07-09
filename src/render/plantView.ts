@@ -61,7 +61,8 @@ export class PlantView {
         .filter((p) => !p.dead && p.kind === 'cone')
         .map((p) => Math.floor(p.charge / 5))
         .join('.');
-      const key = `${plant.version}:${starveBand}:${chargeSig}`;
+      const mycoBand = plant.myco ? Math.floor(plant.myco.half * 30) : -1;
+      const key = `${plant.version}:${starveBand}:${chargeSig}:${mycoBand}`;
       if (key !== e.key) {
         e.key = key;
         drawPlant(e.g, plant, paletteFor(world, plant), ast);
@@ -133,6 +134,81 @@ function strokeArcSampled(
   g.stroke({ width, color, alpha });
 }
 
+/** Cheap deterministic jitter so the web's weave is stable across rebuilds. */
+function weave(i: number, salt: number): number {
+  const s = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return s - Math.floor(s); // 0..1
+}
+
+/**
+ * The Basidiomycota's claim isn't a litter bed — it's the rock itself,
+ * stained and threaded from within. Draw a dark saturation band hugging the
+ * surface plus laced cords woven just underground; both end in questing
+ * hyphal tips at the advancing edges.
+ */
+function drawMycelium(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): void {
+  const half = substrateHalfAngle(plant);
+  const a0 = plant.anchorAngle - half;
+  const steps = Math.max(10, Math.ceil((half * 2) / 0.06));
+  const surf = (a: number): number => surfaceRadiusAt(ast, a);
+
+  // 1) the stain: a wide, dim band just below the surface
+  let started = false;
+  for (let k = 0; k <= steps; k++) {
+    const a = a0 + ((half * 2) * k) / steps;
+    const r = surf(a) - 3;
+    if (!started) {
+      g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      started = true;
+    } else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.stroke({ width: 8, color: c.litter, alpha: 0.28 });
+
+  // 2) the lace: two cords weaving in counter-phase through the stain
+  for (const [phase, depth, w] of [
+    [0, 5.5, 1.6],
+    [Math.PI, 9, 1.2],
+  ] as const) {
+    started = false;
+    for (let k = 0; k <= steps; k++) {
+      const a = a0 + ((half * 2) * k) / steps;
+      const wobble = Math.sin(a * 9 + phase) * 2.4 + (weave(k, plant.id + phase) - 0.5) * 1.6;
+      const r = surf(a) - depth + wobble;
+      if (!started) {
+        g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        started = true;
+      } else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    g.stroke({ width: w, color: c.litter, alpha: 0.75 });
+  }
+
+  // 3) short crosslinks stitching the cords together (sparse, deterministic)
+  const links = Math.max(3, Math.floor(steps / 6));
+  for (let k = 0; k < links; k++) {
+    const t = (k + 0.5) / links;
+    const a = a0 + half * 2 * t;
+    const r = surf(a);
+    const j = (weave(k, plant.id * 7) - 0.5) * 3;
+    g.moveTo(Math.cos(a) * (r - 3 + j), Math.sin(a) * (r - 3 + j))
+      .lineTo(Math.cos(a + 0.02) * (r - 10 + j), Math.sin(a + 0.02) * (r - 10 + j))
+      .stroke({ width: 1, color: c.litter, alpha: 0.5 });
+  }
+
+  // 4) questing tips: bright feelers probing past each advancing edge
+  if (half < Math.PI - 0.02) {
+    for (const s of [-1, 1] as const) {
+      const edge = plant.anchorAngle + s * half;
+      for (let k = 0; k < 3; k++) {
+        const a1 = edge + s * (0.02 + k * 0.025);
+        const rr = surf(edge) - 4 - k * 2.5;
+        g.moveTo(Math.cos(edge) * rr, Math.sin(edge) * rr)
+          .lineTo(Math.cos(a1) * (rr + k), Math.sin(a1) * (rr + k))
+          .stroke({ width: 1.2, color: c.heartCore, alpha: 0.6 - k * 0.15 });
+      }
+    }
+  }
+}
+
 function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): void {
   const f = FACTIONS[plant.faction];
   const starving = plant.alive && plant.energy < plant.capacity * 0.15;
@@ -141,7 +217,9 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
   // terraformed substrate bed: shed litter hugging the actual rock surface.
   // Beds of one colony that touch are also the energy-sharing network, and
   // no seed (friend or foe) can take root inside one.
-  if (plant.alive) {
+  if (plant.alive && plant.myco) {
+    drawMycelium(g, plant, c, ast);
+  } else if (plant.alive) {
     const half = substrateHalfAngle(plant);
     const steps = Math.max(6, Math.ceil((half * 2) / 0.1));
     const a0 = plant.anchorAngle - half;
@@ -304,33 +382,32 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
       }
       case 'heart': {
         if (f.render.heart === 'dome') {
-          // the prime dome: a broad mushroom cap, glow = stored energy.
-          // Soft and vital — the web dies with it.
+          // the prime knot: the web's buried nerve center. A dark node sunk
+          // into the rock, veined with glowing cords — the web dies with it.
           const up = plant.up;
-          const capA = Math.atan2(up.y, up.x);
-          const at = add(p.base, scale(up, 6));
+          const at = add(p.base, scale(up, -4)); // below the surface
           if (p.dead) {
-            if (p.maxHp > 0) g.circle(at.x, at.y, 9).fill({ color: HUSK_HEART, alpha: 0.7 });
+            if (p.maxHp > 0) g.circle(at.x, at.y, 7).fill({ color: HUSK_HEART, alpha: 0.7 });
             break;
           }
           const ratio = Math.max(0, Math.min(1, plant.energy / plant.capacity));
-          g.moveTo(p.base.x - up.x * 1, p.base.y - up.y * 1)
-            .lineTo(at.x, at.y)
-            .stroke({ width: 4, color: c.stemOld });
-          const pts: number[] = [];
-          for (let k = 0; k <= 10; k++) {
-            const a = capA - Math.PI / 2 + (k / 10) * Math.PI;
-            pts.push(at.x + Math.cos(a) * 11, at.y + Math.sin(a) * 11);
-          }
           const body = dmg > 0.05 ? lerpColor(c.heart, WOUND, dmg * 0.7) : c.heart;
-          g.poly(pts).fill({ color: body });
-          // bioluminescent spots brighten with stored energy
           const glow = starving ? c.leafStarving : c.heartCore;
-          for (const [gx, gy] of [[-5, 3], [0, 6], [5, 3]] as const) {
-            const px = at.x + up.x * gy + -up.y * gx;
-            const py = at.y + up.y * gy + up.x * gx;
-            g.circle(px, py, 1.6 + ratio * 1.6).fill({ color: glow, alpha: 0.3 + ratio * 0.6 });
+          // cords radiating from the knot deeper into the stone
+          const baseA = Math.atan2(up.y, up.x);
+          for (const spread of [-0.9, -0.35, 0.35, 0.9]) {
+            const a = baseA + Math.PI + spread; // downward fan
+            g.moveTo(at.x, at.y)
+              .lineTo(at.x + Math.cos(a) * 9, at.y + Math.sin(a) * 9)
+              .stroke({ width: 1.4, color: c.stemOld, alpha: 0.85 });
           }
+          g.circle(at.x, at.y, 7).fill({ color: body });
+          g.circle(at.x, at.y, 7).stroke({ width: 1.2, color: c.stemOld, alpha: 0.8 });
+          // the heartbeat: a bioluminescent core swelling with stored energy
+          g.circle(at.x, at.y, 1.8 + ratio * 3.6).fill({ color: glow, alpha: 0.4 + ratio * 0.55 });
+          // a faint surface blister betrays where the knot sleeps
+          const lip = add(p.base, scale(up, 1));
+          g.circle(lip.x, lip.y, 3).fill({ color: body, alpha: 0.5 });
           break;
         }
         if (f.render.heart === 'bulb') {

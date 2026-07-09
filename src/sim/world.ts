@@ -531,7 +531,7 @@ function stepSeeds(world: World, dt: number): void {
         const a = add(plant.astPos, p.base);
         const b = add(plant.astPos, p.tip);
         if (distToSegment(s.pos, a, b) < 5) {
-          if (FACTIONS[s.faction].repro.infects && !p.infected) {
+          if (FACTIONS[s.faction].repro.infects && !p.infected && p.kind !== 'heart') {
             p.infected = true; // the spore takes hold — prune it off
             plant.version++;
             emit({ type: 'impact', x: s.pos.x, y: s.pos.y, kind: p.kind, power: 4 });
@@ -969,6 +969,7 @@ export function hashWorld(world: World): number {
     mix(p.energy * 100);
     mix(p.parts.length);
     mix(p.alive ? 1 : 0);
+    mix(p.myco ? p.myco.half * 1000 : -1);
     for (const part of p.parts) {
       mix(part.tip.x);
       mix(part.tip.y);

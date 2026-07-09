@@ -47,7 +47,38 @@ export function plantStatus(world: World, plant: Plant): PlantStatus {
   let intent: IntentId;
   let aim: string;
   let cost: number;
-  if (plant.rootCount < g.rootMax) {
+  if (plant.myco) {
+    // fungi don't build upward — the mycelium is the plant. Report the web's
+    // claim on the rock, then whatever the fruiting domes are up to.
+    const cover = Math.min(plant.myco.half / Math.PI, 1);
+    const cones = plant.parts.filter((p) => !p.dead && p.kind === 'cone');
+    const armed = cones.find((p) => p.armedAt >= 0);
+    const charging = cones.filter((p) => p.armedAt < 0);
+    if (armed) {
+      intent = 'cones';
+      aim = `${f.terms.cone} armed — drag from it to aim, or it fires itself`;
+      cost = 0;
+    } else if (charging.length > 0) {
+      intent = 'cones';
+      const pct = Math.round(
+        (Math.max(...charging.map((p) => p.charge)) / f.repro.coneEnergy) * 100,
+      );
+      aim = `ripening a ${f.terms.cone} (${pct}%)`;
+      cost = 0;
+    } else if (cover < 0.99) {
+      intent = 'trunk';
+      aim = `threading the ${f.terms.trunk} through the rock — ${Math.round(cover * 100)}% claimed`;
+      cost = 0; // spread is continuous, paid from energy surplus
+    } else if (aliveConeCount(plant) < f.repro.coneMax) {
+      intent = 'cones';
+      aim = `budding a ${f.terms.cone} in shaded ground`;
+      cost = f.repro.coneCost;
+    } else {
+      intent = 'mature';
+      aim = 'the whole rock is claimed — the web hoards energy';
+      cost = 0;
+    }
+  } else if (plant.rootCount < g.rootMax) {
     intent = 'anchor';
     aim = `driving anchor roots into the rock (${plant.rootCount}/${g.rootMax})`;
     cost = g.rootCost;

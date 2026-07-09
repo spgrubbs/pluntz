@@ -30,6 +30,15 @@ export interface FactionDef {
   };
   /** In-fiction names for parts, used across the UI. */
   terms: { leaf: string; leafOne: string; cone: string; trunk: string };
+  /** myco-style factions only: the underground network's economy. */
+  myco?: {
+    startLen: number; // initial mycelium arc length on sprouting
+    spreadLen: number; // arc-length grown per second (energy permitting)
+    costPerLen: number; // energy per arc-length unit grown
+    upkeepPerLen: number; // energy/s per arc-length unit maintained
+    retreatLen: number; // arc-length lost per second while starving
+    tricklePerLen: number; // baseline rock-digestion income per arc-length
+  };
   /** palettes[0] is the default; extra palettes distinguish same-faction colonies. */
   palettes: FactionColors[];
   /** Static text shown in the inspector's expandable behavior section. */
@@ -41,7 +50,7 @@ export interface FactionDef {
     /** photo = sunlight through leaves; decomp = eats husks, ignores the sun. */
     mode: 'photo' | 'decomp';
     /** decomp mode only. */
-    decomp?: { rockTrickle: number; gillIncome: number; huskRate: number; huskYield: number };
+    decomp?: { huskRate: number; huskYield: number };
     heartInitial: number;
     capBase: number;
     capPerPart: number;
@@ -83,8 +92,8 @@ export interface FactionDef {
     minSpacing: number; // anchors closer than this on one rock fail to sprout
   };
   growth: {
-    /** spire = vertical trunk; vine = surface-hugging runners. */
-    style: 'spire' | 'vine';
+    /** spire = vertical trunk; vine = surface runners; myco = underground network. */
+    style: 'spire' | 'vine' | 'myco';
     actionCooldown: number; // seconds between growth actions
     rootMax: number;
     rootCost: number;
@@ -352,7 +361,15 @@ export const BASIDIOMYCOTA: FactionDef = {
   id: 'basidiomycota',
   name: 'Basidiomycota',
   render: { leaf: 'gill', heart: 'dome', repro: 'dome' },
-  terms: { leaf: 'gills', leafOne: 'gill', cone: 'fruiting dome', trunk: 'hyphal cord' },
+  terms: { leaf: 'gills', leafOne: 'gill', cone: 'fruiting dome', trunk: 'mycelium' },
+  myco: {
+    startLen: 34,
+    spreadLen: 1.15, // wraps a mid-size rock in ~4 min, not 90s
+    costPerLen: 0.45,
+    upkeepPerLen: 0.02,
+    retreatLen: 2.5,
+    tricklePerLen: 0.035,
+  },
   palettes: [
     {
       stem: 0xcfc8dc, // pale lace
@@ -388,18 +405,19 @@ export const BASIDIOMYCOTA: FactionDef = {
   ],
   behavior: {
     summary:
-      'The anti-sun clade. Basidiomycota ignore light entirely: the web creeps ' +
-      'across rock, gills sip minerals, and every husk on their rock is food. ' +
-      'Spore bursts are short-ranged, but a spore landing on living rivals ' +
-      'seeds an infection that spreads part to part — prune it off before it ' +
-      'reaches the heart. When the sun fades at round\u2019s end, they accelerate.',
+      'The anti-sun clade lives underground. The mycelium creeps unseen through ' +
+      'the rock — given time it wraps the far side, and no rival seed can root ' +
+      'in claimed ground. Only soft fruiting domes surface (they prefer shade), ' +
+      'digesting every husk on the rock and bursting spores; a spore landing on ' +
+      'living rivals seeds an infection that spreads part to part — prune it ' +
+      'off. When the sun fades at round\u2019s end, they accelerate.',
     priorities: [
-      { id: 'anchor', text: 'Anchor: holdfasts into the rock' },
-      { id: 'needles', text: 'Raise gills along every cord' },
-      { id: 'trunk', text: 'Creep the web across the surface' },
-      { id: 'branches', text: 'Lace side cords outward' },
-      { id: 'cones', text: 'Swell fruiting domes; burst spores at rock and rival' },
-      { id: 'mature', text: 'Mature: digest, drain, endure the dark' },
+      { id: 'anchor', text: 'Bury the heart; take root in the stone' },
+      { id: 'trunk', text: 'Spread the mycelium through the rock, both ways' },
+      { id: 'cones', text: 'Raise fruiting domes on claimed ground (shade preferred)' },
+      { id: 'needles', text: 'Digest husks and stone through the network' },
+      { id: 'branches', text: 'Starve rivals of rootable ground' },
+      { id: 'mature', text: 'Mature: drain, spore, endure the dark' },
     ],
   },
   life: {
@@ -415,7 +433,7 @@ export const BASIDIOMYCOTA: FactionDef = {
     style: 'ballistic',
     sporeFan: 3,
     infects: true,
-    coneMax: 2,
+    coneMax: 3,
     coneCost: 6,
     coneEnergy: 26,
     chargeRate: 2.0,
@@ -428,7 +446,7 @@ export const BASIDIOMYCOTA: FactionDef = {
   },
   energy: {
     mode: 'decomp',
-    decomp: { rockTrickle: 0.06, gillIncome: 0.22, huskRate: 3.5, huskYield: 0.9 },
+    decomp: { huskRate: 4, huskYield: 0.9 },
     heartInitial: 45,
     capBase: 70,
     capPerPart: 2,
@@ -441,14 +459,14 @@ export const BASIDIOMYCOTA: FactionDef = {
     upkeep: { heart: 0.15, root: 0.04, stem: 0.05, leaf: 0.08, cone: 0.1 },
   },
   growth: {
-    style: 'vine',
-    actionCooldown: 0.5,
-    rootMax: 2,
+    style: 'myco',
+    actionCooldown: 0.6,
+    rootMax: 0, // the buried heart IS the anchor
     rootCost: 4,
     rootLen: 11,
     stemCost: 4,
     leafCost: 4,
-    trunkTarget: 22,
+    trunkTarget: 0, // no above-ground architecture
     trunkSegLen: 6.5,
     trunkTaper: 0.03,
     branchEvery: 3,
@@ -458,8 +476,8 @@ export const BASIDIOMYCOTA: FactionDef = {
     branchCurl: 0.05,
     leafLen: 6,
     leafAngleDeg: 80,
-    leavesPerTrunkStem: 1,
-    leavesPerBranchStem: 2,
+    leavesPerTrunkStem: 0,
+    leavesPerBranchStem: 0,
     wPrevDir: 0.35,
     wUp: 0.06,
     wSun: 0,

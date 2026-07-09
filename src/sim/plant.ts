@@ -67,6 +67,10 @@ export function createPlant(
     buds: [],
     budCursor: 0,
     vineSide: rng.next() < 0.5 ? -1 : 1,
+    myco:
+      f.growth.style === 'myco'
+        ? { half: (f.myco?.startLen ?? 30) / Math.max(asteroid.radius, 1) }
+        : null,
     energy: f.energy.heartInitial,
     capacity: f.energy.capBase,
     rootCount: 0,
@@ -125,7 +129,8 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     outer: for (const p of plant.parts) {
       if (p.dead || !p.infected) continue;
       const parent = p.parent >= 0 ? plant.parts[p.parent] : null;
-      if (parent && !parent.dead && !parent.infected) {
+      // hearts never catch it — Prune must always be able to cure a plant
+      if (parent && !parent.dead && !parent.infected && parent.kind !== 'heart') {
         parent.infected = true;
         plant.version++;
         break;
@@ -190,13 +195,17 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       mods.leafIncome *
       (blessed ? TUNING.verbs.blessIncomeMult : 1);
   }
-  if (decomp && f.energy.decomp) {
-    // saprotroph economy: mineral trickle per cord, digestion per gill, and
-    // any husk on this rock is food. The dying sun feeds them instead.
+  if (decomp && f.energy.decomp && f.myco && plant.myco) {
+    // The mycelium economy: the underground network digests the rock it has
+    // claimed and every husk lying on it. The dying sun feeds them instead.
     const D = f.energy.decomp;
+    const M = f.myco;
+    const r = Math.max(Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y), 1);
+    const coverLen = plant.myco.half * 2 * r;
     const darkBoost = 1 + (1 - world.sunFactor) * 1.2;
-    income += (stems * D.rockTrickle + totalLeaves * D.gillIncome) * mods.leafIncome * darkBoost;
-    let mouths = 3; // how many husk parts one web digests at once
+    income += coverLen * M.tricklePerLen * mods.leafIncome * darkBoost;
+    upkeep += coverLen * M.upkeepPerLen;
+    let mouths = 3; // how many husk parts one network digests at once
     for (const other of world.plants) {
       if (mouths <= 0) break;
       if (other.asteroidId !== plant.asteroidId) continue;
@@ -210,6 +219,19 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       }
     }
     income *= blessed ? TUNING.verbs.blessIncomeMult : 1;
+
+    // spread (or, starving, retreat): the network creeps both ways around
+    // the rock, wrapping the far side given time
+    if (plant.energy > f.energy.reserve && plant.myco.half < Math.PI) {
+      const dLen = M.spreadLen * mods.mycoRateMult * dt;
+      const cost = dLen * M.costPerLen;
+      if (plant.energy - f.energy.reserve > cost) {
+        plant.myco.half = Math.min(Math.PI, plant.myco.half + dLen / r);
+        plant.energy -= cost;
+      }
+    } else if (plant.energy <= 0) {
+      plant.myco.half = Math.max(M.startLen / r, plant.myco.half - (M.retreatLen * dt) / r);
+    }
   }
   plant.lastIncome = income;
   plant.lastUpkeep = upkeep;
@@ -271,7 +293,7 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   const cooldown = f.growth.actionCooldown * (blessed ? TUNING.verbs.blessCooldownMult : 1);
   plant.growthCooldown -= dt;
   if (plant.growthCooldown <= 0) {
-    if (tryGrow(plant, f, toSun, mods)) {
+    if (tryGrow(world, asteroid, plant, f, toSun, mods)) {
       plant.growthCooldown = cooldown;
       plant.version++;
       const grown = plant.parts[plant.parts.length - 1];
@@ -298,6 +320,7 @@ export function trunkTargetFor(f: FactionDef, mods: Mods): number {
  * bed rendering and canopy-control territory (M6).
  */
 export function substrateHalfAngle(plant: Plant): number {
+  if (plant.myco) return plant.myco.half; // the network is the territory
   const S = TUNING.colony.substrate;
   const r = Math.max(Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y), 1);
   const aliveParts = plant.parts.reduce((n, p) => n + (p.dead ? 0 : 1), 0);
@@ -331,9 +354,25 @@ export function aliveConeCount(plant: Plant): number {
 }
 
 /** Attempt exactly one growth action. Returns true if something grew. */
-function tryGrow(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): boolean {
+function tryGrow(
+  world: World,
+  asteroid: Asteroid,
+  plant: Plant,
+  f: FactionDef,
+  toSun: Vec2,
+  mods: Mods,
+): boolean {
   const g = f.growth;
   const spendable = plant.energy - f.energy.reserve;
+
+  // Fungal factions grow no architecture: the mycelium spreads continuously
+  // (see stepPlant) and the only surfacing parts are fruiting domes.
+  if (g.style === 'myco') {
+    if (aliveConeCount(plant) < f.repro.coneMax && spendable >= f.repro.coneCost) {
+      return growDomeOnMycelium(world, asteroid, plant, f, toSun, mods);
+    }
+    return false;
+  }
 
   // 1. Anchor first: roots before anything else.
   if (plant.rootCount < g.rootMax) {
@@ -362,6 +401,71 @@ function tryGrow(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): boolean 
   }
 
   return false;
+}
+
+/**
+ * Raise a fruiting dome somewhere on the mycelium's claimed arc, preferring
+ * spots in rock shadow (shade is a fungal comfort, not a requirement).
+ */
+function growDomeOnMycelium(
+  world: World,
+  asteroid: Asteroid,
+  plant: Plant,
+  f: FactionDef,
+  toSun: Vec2,
+  mods: Mods,
+): boolean {
+  if (!plant.myco) return false;
+  const half = plant.myco.half;
+  let pick: { a: number; lit: boolean } | null = null;
+  for (let k = 0; k < 7; k++) {
+    const a = plant.anchorAngle + plant.rng.range(-half, half);
+    const rSurf = surfaceRadiusAt(asteroid, a);
+    const local = scale(fromAngle(a), rSurf);
+    // keep domes spaced apart
+    let crowded = false;
+    for (const p of plant.parts) {
+      if (p.dead || p.kind !== 'cone') continue;
+      if (Math.hypot(p.base.x - local.x, p.base.y - local.y) < 20) {
+        crowded = true;
+        break;
+      }
+    }
+    if (crowded) continue;
+    const lit = isLit(add(asteroid.pos, scale(fromAngle(a), rSurf + 6)), toSun, world.asteroids);
+    if (!pick || (!lit && pick.lit)) pick = { a, lit }; // shade wins
+    if (pick && !pick.lit) break;
+  }
+  if (!pick) return false;
+  const rSurf = surfaceRadiusAt(asteroid, pick.a);
+  const dir = fromAngle(pick.a);
+  const base = scale(dir, rSurf);
+  const hp = rollHp(plant, f, 'cone', mods);
+  pushPart(plant, {
+    kind: 'cone',
+    parent: 0,
+    base,
+    tip: add(base, scale(dir, 5)),
+    dir,
+    len: 5,
+    depth: 0,
+    onBranch: false,
+    side: 0,
+    leafCount: 0,
+    age: 0,
+    hp,
+    maxHp: hp,
+    dead: false,
+    hardened: false,
+    maxAge: 0,
+    charge: 0,
+    armedAt: -1,
+    infected: false,
+    shade: 0,
+    group: 0,
+  });
+  plant.energy -= f.repro.coneCost;
+  return true;
 }
 
 /** Bud a cone on one of the highest stem tips (trunk top or branch ends). */

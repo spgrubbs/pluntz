@@ -51,8 +51,24 @@ describe('Basidiomycota (M8)', () => {
     run(w, 2500);
     const fungus = w.plants[0];
     expect(fungus.alive).toBe(true);
-    expect(fungus.parts.filter((p) => !p.dead).length).toBeGreaterThan(30);
+    // the plant is the web now: parts stay few, the claimed arc widens
+    expect(fungus.myco).not.toBeNull();
+    const startHalf = 34 / 95; // myco.startLen / rock radius
+    expect(fungus.myco!.half).toBeGreaterThan(startHalf * 1.5);
     expect(fungus.lastIncome).toBeGreaterThan(fungus.lastUpkeep);
+    // fruiting domes surfaced along the claimed ground
+    expect(fungus.parts.some((p) => !p.dead && p.kind === 'cone')).toBe(true);
+  });
+
+  it('the mycelium is territory: no rival seed roots in claimed ground', () => {
+    const w = createWorld(GLOOM, 7);
+    w.debrisPerMin = 0;
+    run(w, 2000);
+    const fungus = w.plants[0];
+    const half = fungus.myco!.half;
+    // well inside the web's claim: rooting is denied
+    const inside = fungus.anchorAngle + half * 0.5;
+    expect(sproutAt(w, w.colonies[1].id, 'pinophyta', w.asteroids[0], inside)).toBe(false);
   });
 
   it('decomposition consumes husks on its rock and feeds the web', () => {
