@@ -423,7 +423,7 @@ factions/sub-clades, each a clean fantasy:
   host colony; wins from *inside* someone else's empire.
 Current Basidiomycota becomes the **detritivore** anchor; the other two are future factions.
 
-### 13.3 Time-gated Mutations (replaces the always-on trait shop)
+### 13.3 Time-gated Mutations (replaces the always-on trait shop) *(shipped)*
 The current trait tree feels low-impact. Replace/augment it with **Mutations**: every
 ~2 minutes, *every* colony (and maybe fauna) is offered a choice of **2 dramatic perks**
 that change *mechanics*, not just stats — reactive counterplay, drafted live. Draw
@@ -436,6 +436,21 @@ inspiration from real phylogenetic tricks, e.g.:
 Metaprogression gates the pool: you access **tier-1 options only until you win 1/2/3 rounds**
 with that faction, then deeper tiers unlock. Other unlocks: **palette swaps**, faction
 cosmetics. (Metaprogression store: extend the localStorage save with a `profile` blob.)
+
+**As shipped:** the trait shop is gone (essence now only fuels Bless/Lure). Every colony —
+AI included — is dealt a 2-card offer at 90s and every 120s after its last choice
+(`content/mutations.ts`, 6 per clade, 2 per tier); AI picks instantly down a preference
+list, the player's offer pulses the 🧬 evolve button and auto-opens the panel. Mechanics
+shipped: Serotiny (debris strikes jolt/fire cones), Ironwood, Thorn Needles / Thorned
+Vines (bites wound fauna — kills queue a 75s respawn), Windborne (seeds curve toward
+rocks), Twin Payload, Evergreen Patience, Everbloom, Sweetfruit (birds prioritize your
+fruit), Succulence (Prune sows seeds), Narcotic Nectar (grazers sate 2.5×), Strangler
+(contact ×2.5 + energy siphon), Deep Cords, Nightbloom (shaded domes charge 2×),
+Sporecloud, Virulence (rot 2× + spread 2.5s), Necrosis (husk digestion 2× + double death
+essence), Puppet Bloom (infection kills burst into your spores — `Part.infected` became
+`infectedBy: colonyId`). Wins per clade live in `localStorage pluntz.profile`; tier t
+unlocks at t−1 wins, AI mirrors the player's depth, and the menu shows ★wins/tier per
+clade. Palette-swap unlocks remain future work.
 
 ### 13.4 Richer fauna ecology
 - **Satiety + harder bites + wandering + curved flight + working Lure**: done in M9.1.
@@ -461,5 +476,6 @@ fungal spore reach.
 
 ---
 
-*Current state: M0–M9 shipped + M9.1 polish + §13.1 (fungal mycelium redesign). In
-progress: §13.3 (time-gated Mutations + metaprogression).*
+*Current state: M0–M9 shipped + M9.1 polish + §13.1 (fungal mycelium redesign) + §13.3
+(time-gated Mutations + metaprogression). Next candidates: §13.2 (fungal identity split),
+§13.4 (new fauna), §13.5 (fog of war / atmosphere).*

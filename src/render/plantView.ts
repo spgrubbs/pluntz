@@ -257,7 +257,7 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
         else {
           color = p.hardened ? c.stemOld : c.stem;
           if (dmg > 0.05) color = lerpColor(color, WOUND, dmg * 0.85);
-          if (p.infected) color = lerpColor(color, INFECT, 0.65);
+          if (p.infectedBy >= 0) color = lerpColor(color, INFECT, 0.65);
         }
         g.moveTo(p.base.x, p.base.y)
           .lineTo(p.tip.x, p.tip.y)
@@ -282,7 +282,7 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
             : p.shade === 1
               ? c.leafCanopy
               : c.leafShaded;
-        if (p.infected) color = lerpColor(color, INFECT, 0.7);
+        if (p.infectedBy >= 0) color = lerpColor(color, INFECT, 0.7);
         const alpha = p.shade === 0 ? 0.95 : p.shade === 1 ? 0.7 : 0.5;
         if (f.render.leaf === 'gill') {
           // a little shelf-fungus fan: trapezoid + gill lines beneath

@@ -4,12 +4,12 @@ import { makeRng } from './rng';
 import type { Asteroid, Debris, FactionId, MapDef, World } from './types';
 import { TUNING } from '../content/tuning';
 import { FACTIONS } from '../content/factions';
-import { createPlant, stepPlant, damagePart, killPart } from './plant';
+import { createPlant, stepPlant, damagePart, killPart, fireCone } from './plant';
 import { canopyCross, isLit, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
 import { emit, setEventSink } from './events';
-import { colonyMods, buyTrait } from './stats';
+import { colonyMods } from './stats';
 import { substrateHalfAngle, canRootAt } from './plant';
-import { AI_TRAIT_ORDER } from '../content/traits';
+import { MUTATIONS, AI_MUTATION_PREF, MUTATION_TIMING } from '../content/mutations';
 
 function makeAsteroidShape(radius: number, seed: number): Vec2[] {
   const rng = makeRng(seed);
@@ -45,6 +45,7 @@ export function createWorld(map: MapDef, seed: number): World {
     seeds: [],
     debris: [],
     fauna: [],
+    faunaRespawns: [],
     ping: null,
     lure: null,
     events: [],
@@ -79,7 +80,10 @@ export function createWorld(map: MapDef, seed: number): World {
       palette: c.palette ?? 0,
       essence: TUNING.essence.starting,
       rockAwards: 0,
-      traits: [],
+      mutations: [],
+      pendingOffer: null,
+      nextMutationAt: MUTATION_TIMING.firstAt,
+      maxTier: 1,
       instincts: { expand: 0.5, vertical: 0.5 },
     });
   }
@@ -92,30 +96,34 @@ export function createWorld(map: MapDef, seed: number): World {
   }
   const fauna = map.fauna ?? { frugivora: 0, phytophaga: 0, anthophila: 0 };
   for (const kind of ['frugivora', 'phytophaga', 'anthophila'] as const) {
-    for (let i = 0; i < fauna[kind]; i++) {
-      const hp = kind === 'frugivora' ? 30 : kind === 'phytophaga' ? 25 : 8;
-      world.fauna.push({
-        id: world.nextId++,
-        kind,
-        pos: v(rng.range(-map.width / 2, map.width / 2), rng.range(-map.height / 2, map.height / 2)),
-        vel: v(0, 0),
-        state: 'wander',
-        targetPlant: -1,
-        targetPart: -1,
-        targetAst: -1,
-        carryColony: -1,
-        carryFaction: null,
-        waypoint: v(rng.range(-map.width / 3, map.width / 3), rng.range(-map.height / 3, map.height / 3)),
-        timer: rng.range(2, 8),
-        hp,
-        maxHp: hp,
-        satiety: rng.range(0, 0.3),
-        wander: rng.range(0, Math.PI * 2),
-        orbit: null,
-      });
-    }
+    for (let i = 0; i < fauna[kind]; i++) spawnFauna(world, kind);
   }
   return world;
+}
+
+/** Spawn one wild critter at a random spot. Also used by respawns. */
+function spawnFauna(world: World, kind: import('./types').FaunaKind): void {
+  const rng = world.rng;
+  const hp = kind === 'frugivora' ? 30 : kind === 'phytophaga' ? 25 : 8;
+  world.fauna.push({
+    id: world.nextId++,
+    kind,
+    pos: v(rng.range(-world.width / 2, world.width / 2), rng.range(-world.height / 2, world.height / 2)),
+    vel: v(0, 0),
+    state: 'wander',
+    targetPlant: -1,
+    targetPart: -1,
+    targetAst: -1,
+    carryColony: -1,
+    carryFaction: null,
+    waypoint: v(rng.range(-world.width / 3, world.width / 3), rng.range(-world.height / 3, world.height / 3)),
+    timer: rng.range(2, 8),
+    hp,
+    maxHp: hp,
+    satiety: rng.range(0, 0.3),
+    wander: rng.range(0, Math.PI * 2),
+    orbit: null,
+  });
 }
 
 /** The Lure verb: a 40s scent that pulls fauna. Costs essence. */
@@ -254,7 +262,11 @@ function findRipeFruit(
           o.targetPart === p.id,
       );
       if (claimed) continue;
-      const d = dist(claimedBy.pos, { x: plant.astPos.x + p.tip.x, y: plant.astPos.y + p.tip.y });
+      let d = dist(claimedBy.pos, { x: plant.astPos.x + p.tip.x, y: plant.astPos.y + p.tip.y });
+      // Sweetfruit: birds cross the map for this colony's fruit first
+      if (colonyMods(world.colonies.find((c) => c.id === plant.colonyId)).sweetfruit) {
+        d *= 0.25;
+      }
       if (d < bestD) {
         bestD = d;
         best = { plant, part: p };
@@ -419,7 +431,16 @@ function stepFauna(world: World, dt: number): void {
           steer(fn, at, FAUNA_SPEED.phytophaga, dt);
           if (dist(fn.pos, at) < 14) {
             damagePart(cur, leaf.id, 6 * dt); // grazers bite hard now
-            fn.satiety = Math.min(1, fn.satiety + dt / 14); // a full meal ~14s
+            const gm = colonyMods(world.colonies.find((c) => c.id === cur.colonyId));
+            // Narcotic Nectar: drugged grazers fill up fast and wander off
+            fn.satiety = Math.min(1, fn.satiety + (dt / 14) * (gm.nectarSleep ? 2.5 : 1));
+            // Thorns: every bite costs blood — enough bites kill
+            if (gm.thorns) {
+              fn.hp -= 9 * dt;
+              if (world.tick % 10 === 0) {
+                emit({ type: 'impact', x: fn.pos.x, y: fn.pos.y, power: 3 });
+              }
+            }
           }
         }
         break;
@@ -445,6 +466,20 @@ function stepFauna(world: World, dt: number): void {
         break;
       }
     }
+  }
+
+  // deaths (thorns and other hazards), then delayed respawns as fresh critters
+  for (let i = world.fauna.length - 1; i >= 0; i--) {
+    const fn = world.fauna[i];
+    if (fn.hp > 0) continue;
+    emit({ type: 'shatter', x: fn.pos.x, y: fn.pos.y, power: 6 });
+    world.faunaRespawns.push({ kind: fn.kind, at: world.time + 75 });
+    world.fauna.splice(i, 1);
+  }
+  for (let i = world.faunaRespawns.length - 1; i >= 0; i--) {
+    if (world.time < world.faunaRespawns[i].at) continue;
+    const r = world.faunaRespawns.splice(i, 1)[0];
+    spawnFauna(world, r.kind);
   }
 }
 
@@ -485,6 +520,7 @@ export function setPing(world: World, colonyId: number, pos: Vec2): void {
 }
 
 function stepSeeds(world: World, dt: number): void {
+  const modsBy = new Map(world.colonies.map((c) => [c.id, colonyMods(c)] as const));
   for (let i = world.seeds.length - 1; i >= 0; i--) {
     const s = world.seeds[i];
 
@@ -502,6 +538,23 @@ function stepSeeds(world: World, dt: number): void {
       continue;
     }
 
+    // Windborne: seeds feel the pull of nearby rocks and curve toward them
+    if (modsBy.get(s.colonyId)?.windborne) {
+      let pullTo: Vec2 | null = null;
+      let bd = 260;
+      for (const a of world.asteroids) {
+        const d = dist(s.pos, a.pos) - a.radius;
+        if (d > 8 && d < bd) {
+          bd = d;
+          pullTo = a.pos;
+        }
+      }
+      if (pullTo) {
+        const pull = scale(norm(sub(pullTo, s.pos)), 60 * dt);
+        s.vel.x += pull.x;
+        s.vel.y += pull.y;
+      }
+    }
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
     s.age += dt;
@@ -531,8 +584,8 @@ function stepSeeds(world: World, dt: number): void {
         const a = add(plant.astPos, p.base);
         const b = add(plant.astPos, p.tip);
         if (distToSegment(s.pos, a, b) < 5) {
-          if (FACTIONS[s.faction].repro.infects && !p.infected && p.kind !== 'heart') {
-            p.infected = true; // the spore takes hold — prune it off
+          if (FACTIONS[s.faction].repro.infects && p.infectedBy < 0 && p.kind !== 'heart') {
+            p.infectedBy = s.colonyId; // the spore takes hold — prune it off
             plant.version++;
             emit({ type: 'impact', x: s.pos.x, y: s.pos.y, kind: p.kind, power: 4 });
           } else {
@@ -559,22 +612,6 @@ function stepSeeds(world: World, dt: number): void {
           y: at.y,
           faction: s.faction,
         });
-        // Volatile Seeds: the landing sears nearby rival growth either way
-        const mods = colonyMods(world.colonies.find((c) => c.id === s.colonyId));
-        if (mods.volatileSeeds) {
-          emit({ type: 'shatter', x: at.x, y: at.y, power: 10 });
-          for (const plant of world.plants) {
-            if (!plant.alive || plant.colonyId === s.colonyId) continue;
-            if (dist(at, plant.astPos) > 320) continue;
-            for (const p of plant.parts) {
-              if (p.dead) continue;
-              const a = add(plant.astPos, p.base);
-              const b = add(plant.astPos, p.tip);
-              if (distToSegment(at, a, b) < 34) damagePart(plant, p.id, 20);
-              if (!plant.alive) break;
-            }
-          }
-        }
         world.seeds.splice(i, 1);
         break;
       }
@@ -634,7 +671,7 @@ export function stepWorld(world: World, dt: number): void {
   stepEssence(world);
   if (world.tick % 10 === 0) {
     stepCanopyControl(world, dt * 10);
-    stepAiStrategy(world);
+    stepMutations(world);
     checkRoundEnd(world);
   }
 }
@@ -652,20 +689,48 @@ function stepEssence(world: World): void {
     if (p.alive || p.deathScored) continue;
     p.deathScored = true;
     for (const c of world.colonies) {
-      if (c.id !== p.colonyId) c.essence += E.rivalDeathBonus;
+      // Necrosis doubles the payout — death is the fungus' harvest
+      if (c.id !== p.colonyId) c.essence += E.rivalDeathBonus * colonyMods(c).essenceOnDeathMult;
     }
   }
 }
 
-/** AI colonies buy traits down their faction's scripted order. */
-function stepAiStrategy(world: World): void {
+/**
+ * The mutation clock: every colony is periodically dealt a two-card offer
+ * from the shallowest tier it hasn't finished (gated by maxTier). AI picks
+ * immediately down its faction's preference list; the player's offer waits
+ * in pendingOffer, and their next deal is timed from the moment they choose.
+ */
+function stepMutations(world: World): void {
+  if (world.roundState !== 'playing') return;
   for (const c of world.colonies) {
-    if (c.isPlayer) continue;
-    for (const id of AI_TRAIT_ORDER[c.faction] ?? []) {
-      if (!c.traits.includes(id)) {
-        buyTrait(world, c.id, id); // no-op when unaffordable
-        break;
-      }
+    if (c.pendingOffer || world.time < c.nextMutationAt) continue;
+    const pool = (MUTATIONS[c.faction] ?? []).filter(
+      (m) => m.tier <= c.maxTier && !c.mutations.includes(m.id),
+    );
+    if (pool.length === 0) {
+      c.nextMutationAt = MUTATION_TIMING.never; // evolved out — nothing left
+      continue;
+    }
+    pool.sort((a, b) => a.tier - b.tier);
+    // first card from the shallowest tier on offer; the second from the next
+    // few, so a deep option can tempt you away from finishing a tier
+    const shallow = pool.filter((m) => m.tier === pool[0].tier);
+    const first = shallow[world.rng.int(shallow.length)];
+    const rest = pool.filter((m) => m.id !== first.id);
+    const offer = [first.id];
+    if (rest.length > 0) offer.push(rest[world.rng.int(Math.min(rest.length, 3))].id);
+    if (!c.isPlayer) {
+      const pref = AI_MUTATION_PREF[c.faction] ?? [];
+      const rank = (id: string): number => {
+        const i = pref.indexOf(id);
+        return i < 0 ? 99 : i;
+      };
+      const pick = offer.slice().sort((x, y) => rank(x) - rank(y))[0];
+      c.mutations.push(pick);
+      c.nextMutationAt = world.time + MUTATION_TIMING.interval;
+    } else {
+      c.pendingOffer = offer; // chooseMutation() reschedules
     }
   }
 }
@@ -783,6 +848,17 @@ function applyContactDamage(world: World, dt: number): void {
           if (segSegDist(a1, a2, b1, b2) < 3.5) {
             damagePart(A, pa.id, CONTACT_DPS[pa.kind] * dmgToA);
             damagePart(B, pb.id, CONTACT_DPS[pb.kind] * dmgToB);
+            // Strangler: the runner drinks what it crushes
+            if (mA?.strangler && A.alive && B.alive) {
+              const sip = Math.min(1.4 * dt, B.energy);
+              B.energy -= sip;
+              A.energy = Math.min(A.energy + sip, A.capacity);
+            }
+            if (mB?.strangler && A.alive && B.alive) {
+              const sip = Math.min(1.4 * dt, A.energy);
+              A.energy -= sip;
+              B.energy = Math.min(B.energy + sip, B.capacity);
+            }
             if (!A.alive) return;
             if (!B.alive) break;
           }
@@ -886,6 +962,7 @@ function stepDebris(world: World, dt: number): void {
         if (distToSegment(d.pos, a, b) < slack) {
           const dmg = d.radius * len(d.vel) * D.dmgFactor;
           damagePart(plant, p.id, dmg);
+          joltSerotiny(world, ast.id);
           destroyed = true;
           break outer;
         }
@@ -896,12 +973,35 @@ function stepDebris(world: World, dt: number): void {
         if (dist(d.pos, a.pos) < d.radius + a.radius) {
           emit({ type: 'shatter', x: d.pos.x, y: d.pos.y, power: d.radius });
           dropRiders(world, d.id, a); // any hitching seeds make landfall here
+          joltSerotiny(world, a.id);
           destroyed = true;
           break;
         }
       }
     }
     if (destroyed) world.debris.splice(i, 1);
+  }
+}
+
+/**
+ * Serotiny: a debris strike on a rock is a signal, not just a wound. Every
+ * cone belonging to a serotinous colony on that rock surges with charge, and
+ * armed cones fire on the spot — catastrophe scatters the next generation.
+ */
+function joltSerotiny(world: World, asteroidId: number): void {
+  for (const plant of world.plants) {
+    if (!plant.alive || plant.asteroidId !== asteroidId) continue;
+    const mods = colonyMods(world.colonies.find((c) => c.id === plant.colonyId));
+    if (!mods.serotiny) continue;
+    const R = FACTIONS[plant.faction].repro;
+    for (const p of plant.parts) {
+      if (p.dead || p.kind !== 'cone') continue;
+      if (p.armedAt >= 0) {
+        fireCone(world, plant, p.id, null);
+      } else {
+        p.charge = Math.min(p.charge + R.coneEnergy * 0.4, R.coneEnergy);
+      }
+    }
   }
 }
 
@@ -980,10 +1080,13 @@ export function hashWorld(world: World): number {
   }
   for (const c of world.colonies) {
     mix(c.essence);
-    mix(c.traits.length);
+    mix(c.mutations.length);
+    mix(c.pendingOffer ? c.pendingOffer.length : -1);
+    mix(Math.min(c.nextMutationAt, 1e6));
     mix(c.instincts.expand * 100);
     mix(c.instincts.vertical * 100);
   }
+  mix(world.faunaRespawns.length);
   mix(world.debris.length);
   for (const d of world.debris) {
     mix(d.pos.x);

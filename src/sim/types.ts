@@ -51,7 +51,7 @@ export interface Part {
   maxAge: number; // natural lifespan (leaves); 0 = immortal
   charge: number; // cones: energy banked toward a seed
   armedAt: number; // cones: sim time when fully charged, -1 if not
-  infected: boolean; // fungal parasite aboard: DoT + spread; prune it off
+  infectedBy: number; // colony id of the parasite aboard (DoT + spread), -1 clean
   shade: ShadeLevel; // leaves only: last light query result
   /**
    * Occlusion group: needles never shade needles of the same group (a branch
@@ -131,9 +131,12 @@ export interface Colony {
   faction: FactionId;
   isPlayer: boolean;
   palette: number; // index into the faction's palette list
-  essence: number; // the strategic currency: traits & strong verbs
+  essence: number; // the strategic currency: strong verbs (Bless, Lure)
   rockAwards: number; // fresh-rock essence bonuses already paid (diminishing)
-  traits: string[]; // owned trait ids (see content/traits.ts)
+  mutations: string[]; // owned mutation ids (see content/mutations.ts)
+  pendingOffer: string[] | null; // two mutation ids awaiting the player's pick
+  nextMutationAt: number; // sim time the next offer arrives
+  maxTier: 1 | 2 | 3; // metaprogression gate: deepest mutation tier available
   /** Autonomous-policy sliders, both 0..1. */
   instincts: { expand: number; vertical: number };
 }
@@ -205,6 +208,8 @@ export interface World {
   seeds: Seed[];
   debris: Debris[];
   fauna: Fauna[];
+  /** Fauna killed (e.g. by thorns) come back after a spell, as new individuals. */
+  faunaRespawns: { kind: FaunaKind; at: number }[];
   ping: Ping | null;
   lure: Ping | null; // fauna-attracting scent (the Lure verb)
   events: SimEvent[]; // drained by the renderer every frame

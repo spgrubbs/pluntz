@@ -1,20 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { createWorld, stepWorld, sproutAt, computeCanopyControl } from '../world';
-import { buyTrait, bless, colonyMods } from '../stats';
+import { bless, colonyMods } from '../stats';
 import { damagePart } from '../plant';
 import { CONTACT01 } from '../../content/maps/contact01';
 import { TUNING } from '../../content/tuning';
 
 describe('strategy layer (M6)', () => {
-  it('buyTrait spends essence, applies mods, and rejects the unaffordable', () => {
+  it('owned mutations shape the colony mods', () => {
     const w = createWorld(CONTACT01, 7);
     const c = w.colonies[0];
-    c.essence = 4;
-    expect(buyTrait(w, c.id, 'longshot')).toBe(false); // costs 5
-    expect(buyTrait(w, c.id, 'swiftcones')).toBe(true); // costs 4
-    expect(c.essence).toBe(0);
-    expect(buyTrait(w, c.id, 'swiftcones')).toBe(false); // already owned
+    c.mutations.push('everbloom');
     expect(colonyMods(c).chargeRate).toBeGreaterThan(colonyMods(w.colonies[1]).chargeRate);
+    c.mutations.push('ironwood');
+    const m = colonyMods(c);
+    expect(m.contactTaken).toBeLessThan(1);
+    expect(m.hardenBonusAdd).toBeGreaterThan(0);
   });
 
   it('instinct sliders shift the mods', () => {

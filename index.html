@@ -218,6 +218,48 @@
         color: #8fa0bd;
         line-height: 1.4;
       }
+      .tp-offer-head {
+        color: #d78cff;
+        letter-spacing: 1.5px;
+        margin: 10px 0 2px;
+        font-size: 11px;
+      }
+      .tp-offer-head.tp-wait {
+        color: #6d7ea0;
+      }
+      .tp-trait.tp-offer {
+        opacity: 1;
+        cursor: pointer;
+        border-color: #8a4fd0;
+        background: rgba(138, 79, 208, 0.12);
+      }
+      .tp-trait.tp-offer:hover {
+        border-color: #c99aff;
+        background: rgba(138, 79, 208, 0.24);
+      }
+      .tp-trait.tp-offer .tp-trait-top span {
+        color: #c99aff;
+      }
+      .tp-owned-head {
+        color: #6d7ea0;
+        letter-spacing: 1.5px;
+        margin: 12px 0 2px;
+        font-size: 11px;
+      }
+      .tp-tier-note {
+        color: #55648a;
+        font-size: 11px;
+        margin: 8px 0 0;
+      }
+      @keyframes offer-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(199, 132, 255, 0.7); }
+        50% { box-shadow: 0 0 12px 3px rgba(199, 132, 255, 0.35); }
+      }
+      .verb-tray button.offer {
+        border-color: #c99aff;
+        color: #e7d2ff;
+        animation: offer-pulse 1.6s ease-in-out infinite;
+      }
       .menu {
         position: absolute;
         inset: 0;
@@ -295,6 +337,13 @@
         color: #56637f;
         margin-top: 3px;
         font-size: 10px;
+      }
+      .menu-row button em {
+        display: block;
+        color: #c9a24f;
+        margin-top: 3px;
+        font-size: 10px;
+        font-style: normal;
       }
       .menu-row .seed {
         flex: 1;

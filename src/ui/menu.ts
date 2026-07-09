@@ -1,5 +1,6 @@
 import type { FactionId } from '../sim/types';
 import { MAPS, MAP_CHOICES } from '../content/maps/index';
+import { winsFor, maxTierFor } from './profile';
 
 export interface GameConfig {
   mapId: string;
@@ -69,7 +70,7 @@ export class Menu {
       const target = el.querySelector(row)!;
       for (const fc of FACTION_CHOICES) {
         const b = document.createElement('button');
-        b.innerHTML = `${fc.label}<small>${fc.blurb}</small>`;
+        b.innerHTML = `${fc.label}<small>${fc.blurb}</small>${row === '.pf' ? '<em class="wins"></em>' : ''}`;
         b.dataset.id = fc.id;
         b.addEventListener('click', () => {
           this.cfg[key] = fc.id;
@@ -99,9 +100,16 @@ export class Menu {
     el.querySelectorAll<HTMLElement>('.maps button').forEach((b) =>
       b.classList.toggle('active', b.dataset.id === this.cfg.mapId),
     );
-    el.querySelectorAll<HTMLElement>('.pf button').forEach((b) =>
-      b.classList.toggle('active', b.dataset.id === this.cfg.playerFaction),
-    );
+    el.querySelectorAll<HTMLElement>('.pf button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.id === this.cfg.playerFaction);
+      // metaprogression readout: wins with this clade -> unlocked mutation depth
+      const winsEl = b.querySelector('.wins');
+      if (winsEl) {
+        const f = b.dataset.id as FactionId;
+        const w = winsFor(f);
+        winsEl.textContent = w > 0 ? `★${w} · mutations tier ${maxTierFor(f)}` : 'mutations tier 1';
+      }
+    });
     el.querySelectorAll<HTMLElement>('.af button').forEach((b) =>
       b.classList.toggle('active', b.dataset.id === this.cfg.aiFaction),
     );
@@ -112,7 +120,7 @@ export class Menu {
     // resume only when a garden is stored
     let hasSave = false;
     try {
-      hasSave = !!localStorage.getItem('pluntz.save');
+      hasSave = !!localStorage.getItem('pluntz.save.v2');
     } catch {
       hasSave = false;
     }

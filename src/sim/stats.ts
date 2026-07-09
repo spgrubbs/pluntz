@@ -1,9 +1,9 @@
 import type { Colony, Plant, World } from './types';
-import { TRAITS } from '../content/traits';
+import { MUTATION_TIMING } from '../content/mutations';
 import { TUNING } from '../content/tuning';
 import { emit } from './events';
 
-/** Resolved colony-wide modifiers from traits + instinct sliders. */
+/** Resolved colony-wide modifiers from mutations + instinct sliders. */
 export interface Mods {
   leafIncome: number;
   chargeRate: number;
@@ -19,8 +19,22 @@ export interface Mods {
   canopyShadeOverride: number | null;
   contactDealt: number;
   contactTaken: number;
-  volatileSeeds: boolean;
   mycoRateMult: number; // mycelium spread speed multiplier
+  // mutation mechanics (see content/mutations.ts)
+  serotiny: boolean; // debris strikes jolt & fire cones on the struck rock
+  thorns: boolean; // grazers take damage per bite
+  windborne: boolean; // seeds curve toward nearby rocks
+  twinPayload: boolean; // +1 seed per launch
+  sweetfruit: boolean; // birds prioritize this colony's fruit
+  succulence: boolean; // pruned parts become seeds
+  nectarSleep: boolean; // grazers sate 2.5x faster on this colony
+  strangler: boolean; // contact damage also siphons rival energy
+  nightbloom: boolean; // shaded domes charge 2x
+  sporeFanAdd: number; // extra spores per dome burst
+  virulent: boolean; // infection rots & spreads faster
+  huskRateMult: number; // husk digestion speed
+  puppetBloom: boolean; // infection kills burst into this colony's spores
+  essenceOnDeathMult: number; // rival-death essence payout multiplier
 }
 
 export const DEFAULT_MODS: Mods = {
@@ -38,29 +52,63 @@ export const DEFAULT_MODS: Mods = {
   canopyShadeOverride: null,
   contactDealt: 1,
   contactTaken: 1,
-  volatileSeeds: false,
   mycoRateMult: 1,
+  serotiny: false,
+  thorns: false,
+  windborne: false,
+  twinPayload: false,
+  sweetfruit: false,
+  succulence: false,
+  nectarSleep: false,
+  strangler: false,
+  nightbloom: false,
+  sporeFanAdd: 0,
+  virulent: false,
+  huskRateMult: 1,
+  puppetBloom: false,
+  essenceOnDeathMult: 1,
 };
 
 export function colonyMods(colony: Colony | undefined): Mods {
   const m: Mods = { ...DEFAULT_MODS };
   if (!colony) return m;
-  const has = (id: string): boolean => colony.traits.includes(id);
-  if (has('broadneedle')) m.leafIncome *= 1.2;
-  if (has('taproots')) m.seedlingEnergyAdd += 15;
-  if (has('ironbark')) {
-    m.hardenAgeMult *= 0.55;
-    m.hardenBonusAdd += 5;
+  const has = (id: string): boolean => colony.mutations.includes(id);
+  // pinophyta
+  if (has('ironwood')) {
+    m.hardenAgeMult *= 0.5;
+    m.hardenBonusAdd += 8;
+    m.contactTaken *= 0.6;
   }
-  if (has('cuticle')) m.canopyShadeOverride = 0.65;
-  if (has('tallcrown')) m.trunkTargetAdd += 4;
-  if (has('volatile')) m.volatileSeeds = true;
-  if (has('resin')) m.contactDealt *= 1.5;
-  if (has('swiftcones')) m.chargeRate *= 1.5;
-  if (has('greatboughs')) m.branchStepsAdd += 1;
-  if (has('longshot')) m.seedRange *= 1.35;
-  if (has('evergreen')) m.shadeFloorOverride = 0.28;
-  if (has('martial')) m.contactTaken *= 0.6;
+  if (has('serotiny')) m.serotiny = true;
+  if (has('thornneedle') || has('thornvine')) m.thorns = true;
+  if (has('windborne')) {
+    m.windborne = true;
+    m.seedRange *= 1.45;
+  }
+  if (has('twinpayload')) m.twinPayload = true;
+  if (has('evergreen')) {
+    m.shadeFloorOverride = 0.3;
+    m.canopyShadeOverride = 0.7;
+  }
+  // anthophyta
+  if (has('everbloom')) m.chargeRate *= 1.6;
+  if (has('sweetfruit')) m.sweetfruit = true;
+  if (has('succulence')) m.succulence = true;
+  if (has('nectarsleep')) m.nectarSleep = true;
+  if (has('strangler')) {
+    m.strangler = true;
+    m.contactDealt *= 2.5;
+  }
+  // basidiomycota
+  if (has('deepcords')) m.mycoRateMult *= 1.6;
+  if (has('nightbloom')) m.nightbloom = true;
+  if (has('sporecloud')) m.sporeFanAdd += 2;
+  if (has('virulence')) m.virulent = true;
+  if (has('necrosis')) {
+    m.huskRateMult *= 2;
+    m.essenceOnDeathMult = 2;
+  }
+  if (has('puppetbloom')) m.puppetBloom = true;
 
   // instinct sliders: Expand <-> Fortify, Spread <-> Tall
   const e = colony.instincts.expand;
@@ -72,13 +120,17 @@ export function colonyMods(colony: Colony | undefined): Mods {
   return m;
 }
 
-export function buyTrait(world: World, colonyId: number, traitId: string): boolean {
+/**
+ * Accept one card from the colony's pending mutation offer. Free — the cost
+ * is the road not taken. Rescheduling runs from the moment of choice, so a
+ * slow chooser delays their own next offer.
+ */
+export function chooseMutation(world: World, colonyId: number, mutationId: string): boolean {
   const colony = world.colonies.find((c) => c.id === colonyId);
-  if (!colony || colony.traits.includes(traitId)) return false;
-  const def = TRAITS[colony.faction]?.find((t) => t.id === traitId);
-  if (!def || colony.essence < def.cost) return false;
-  colony.essence -= def.cost;
-  colony.traits.push(traitId);
+  if (!colony || !colony.pendingOffer || !colony.pendingOffer.includes(mutationId)) return false;
+  colony.mutations.push(mutationId);
+  colony.pendingOffer = null;
+  colony.nextMutationAt = world.time + MUTATION_TIMING.interval;
   return true;
 }
 

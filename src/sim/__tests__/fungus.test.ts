@@ -111,14 +111,14 @@ describe('Basidiomycota (M8)', () => {
     });
     run(w, 40);
     const infected = (): number =>
-      victim.parts.filter((p) => !p.dead && p.infected).length;
+      victim.parts.filter((p) => !p.dead && p.infectedBy >= 0).length;
     expect(infected()).toBeGreaterThan(0);
     const before = infected();
     run(w, 120); // 12s: at least two spread ticks
     expect(infected()).toBeGreaterThan(before);
     // prune every infected part off — the cure
     for (const p of victim.parts) {
-      if (!p.dead && p.infected) {
+      if (!p.dead && p.infectedBy >= 0) {
         const mid = add(victim.astPos, {
           x: (p.base.x + p.tip.x) / 2,
           y: (p.base.y + p.tip.y) / 2,

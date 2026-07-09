@@ -24,6 +24,7 @@ import { Inspector } from './ui/inspector';
 import { TraitPanel } from './ui/traitPanel';
 import { Menu, type GameConfig } from './ui/menu';
 import { bless } from './sim/stats';
+import { maxTierFor, recordWin } from './ui/profile';
 
 async function boot(): Promise<void> {
   const app = new Application();
@@ -61,8 +62,17 @@ async function boot(): Promise<void> {
     return m;
   }
   let world: World = createWorld(map, seed);
+  applyMetaTiers(world);
   setEventSink(world.events);
   let playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
+
+  /** Metaprogression: every colony's mutation depth mirrors the player's
+   * unlocked tier for their clade (the opposition scales with you). */
+  function applyMetaTiers(w: World): void {
+    const player = w.colonies.find((c) => c.isPlayer);
+    const tier = player ? maxTierFor(player.faction) : 1;
+    for (const c of w.colonies) c.maxTier = tier;
+  }
 
   // --- Scene graph -------------------------------------------------------------
   let starfield = new Starfield(world.width, world.height, seed);
@@ -250,8 +260,9 @@ async function boot(): Promise<void> {
     () => playerColonyId,
   );
   const traitBtn = document.createElement('button');
-  traitBtn.textContent = '⬡ evolve';
+  traitBtn.textContent = '🧬 evolve';
   traitBtn.addEventListener('click', () => traitPanel.toggle());
+  let offerAnnounced = false;
   // verbs live in a collapsible tray so they never cover the inspector
   const verbTray = document.createElement('div');
   verbTray.className = 'verb-tray';
@@ -316,6 +327,7 @@ async function boot(): Promise<void> {
   function resetWorld(reseed: boolean): void {
     if (reseed) seed = (Date.now() % 0xffffffff) >>> 0;
     world = createWorld(map, seed);
+    applyMetaTiers(world);
     setEventSink(world.events);
     playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
     aiming = null;
@@ -328,7 +340,7 @@ async function boot(): Promise<void> {
   }
 
   // --- Save / resume ---------------------------------------------------------------
-  const SAVE_KEY = 'pluntz.save';
+  const SAVE_KEY = 'pluntz.save.v2'; // v2: traits -> mutations (old saves are stale)
   let lastSaveAt = 0;
   function trySave(): void {
     try {
@@ -437,6 +449,11 @@ async function boot(): Promise<void> {
     if (world.roundState !== 'playing' && !bannerShown) {
       bannerShown = true;
       clearSave(); // finished gardens don't resume
+      if (world.roundState === 'won') {
+        // metaprogression: a win deepens this clade's mutation pool
+        const pc = world.colonies.find((c) => c.id === playerColonyId);
+        if (pc) recordWin(pc.faction);
+      }
       const t = fmtTime(world.endedAt);
       const rival = world.colonies.find((c) => !c.isPlayer)?.name ?? 'the rival';
       const won = world.roundState === 'won';
@@ -529,6 +546,16 @@ async function boot(): Promise<void> {
     inspector.update(world);
     traitPanel.update();
     updateRoundUi();
+
+    // a pending mutation offer pulses the evolve button and opens the panel
+    const pc = world.colonies.find((c) => c.id === playerColonyId);
+    const offerWaiting = !!pc?.pendingOffer;
+    traitBtn.classList.toggle('offer', offerWaiting);
+    if (offerWaiting && !offerAnnounced && !menu.isOpen()) {
+      offerAnnounced = true;
+      traitPanel.show();
+    }
+    if (!offerWaiting) offerAnnounced = false;
 
     // autosave every 10 sim-seconds while a round is live
     if (world.roundState === 'playing' && world.time - lastSaveAt >= 10) {

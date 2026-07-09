@@ -146,7 +146,7 @@ export class FxView {
     for (const plant of world.plants) {
       if (!plant.alive) continue;
       for (const p of plant.parts) {
-        if (p.dead || !p.infected) continue;
+        if (p.dead || p.infectedBy < 0) continue;
         if (Math.random() < dt * 1.5) {
           this.spawn({
             x: plant.astPos.x + (p.base.x + p.tip.x) / 2,

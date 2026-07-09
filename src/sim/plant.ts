@@ -49,7 +49,7 @@ export function createPlant(
     maxAge: 0,
     charge: 0,
     armedAt: -1,
-    infected: false,
+    infectedBy: -1,
     shade: 0,
     group: 0,
   };
@@ -107,6 +107,16 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
 
   // --- Aging: bark hardening, natural needle drop, infection rot -------------
   let anyInfected = false;
+  let anyVirulent = false;
+  let infectorId = -1;
+  let infectorMods: Mods | null = null;
+  const modsOfInfector = (colonyId: number): Mods => {
+    if (infectorId !== colonyId) {
+      infectorId = colonyId;
+      infectorMods = colonyMods(world.colonies.find((c) => c.id === colonyId));
+    }
+    return infectorMods!;
+  };
   for (const p of plant.parts) {
     if (p.dead) continue;
     p.age += dt;
@@ -115,29 +125,53 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       p.hp += f.life.hardenBonus + mods.hardenBonusAdd;
       p.maxHp += f.life.hardenBonus + mods.hardenBonusAdd;
     }
-    if (p.infected) {
+    if (p.infectedBy >= 0) {
       anyInfected = true;
-      p.hp -= 0.4 * dt; // the parasite eats quietly (no impact-event spam)
-      if (p.hp <= 0) killPart(plant, p.id);
+      const im = modsOfInfector(p.infectedBy);
+      if (im.virulent) anyVirulent = true;
+      p.hp -= (im.virulent ? 0.8 : 0.4) * dt; // the parasite eats quietly
+      if (p.hp <= 0) {
+        const at = add(plant.astPos, p.tip);
+        const outward = p.dir;
+        const infector = p.infectedBy;
+        killPart(plant, p.id);
+        // Puppet Bloom: the corpse bursts into the parasite's own spores
+        if (im.puppetBloom) {
+          const owner = world.colonies.find((c) => c.id === infector);
+          if (owner) {
+            world.seeds.push({
+              id: world.nextId++,
+              colonyId: infector,
+              faction: owner.faction,
+              pos: { ...at },
+              vel: scale(rot(outward, plant.rng.range(-0.6, 0.6)), 60),
+              age: 0,
+              maxAge: 3.5,
+              riding: -1,
+            });
+            emit({ type: 'seedLaunch', x: at.x, y: at.y, faction: owner.faction });
+          }
+        }
+      }
     }
     if (p.maxAge > 0 && p.age > p.maxAge) killPart(plant, p.id); // needle drops, slot reopens
   }
 
   // infection creeps to a neighboring part every few seconds — prune it off
   if (anyInfected && world.time >= plant.infectSpreadAt) {
-    plant.infectSpreadAt = world.time + 5;
+    plant.infectSpreadAt = world.time + (anyVirulent ? 2.5 : 5);
     outer: for (const p of plant.parts) {
-      if (p.dead || !p.infected) continue;
+      if (p.dead || p.infectedBy < 0) continue;
       const parent = p.parent >= 0 ? plant.parts[p.parent] : null;
       // hearts never catch it — Prune must always be able to cure a plant
-      if (parent && !parent.dead && !parent.infected && parent.kind !== 'heart') {
-        parent.infected = true;
+      if (parent && !parent.dead && parent.infectedBy < 0 && parent.kind !== 'heart') {
+        parent.infectedBy = p.infectedBy;
         plant.version++;
         break;
       }
       for (const c of plant.parts) {
-        if (!c.dead && !c.infected && c.parent === p.id) {
-          c.infected = true;
+        if (!c.dead && c.infectedBy < 0 && c.parent === p.id) {
+          c.infectedBy = p.infectedBy;
           plant.version++;
           break outer;
         }
@@ -211,7 +245,7 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       if (other.asteroidId !== plant.asteroidId) continue;
       for (const hp of other.parts) {
         if (!hp.dead || hp.maxHp <= 0) continue;
-        const bite = Math.min(D.huskRate * dt, hp.maxHp);
+        const bite = Math.min(D.huskRate * mods.huskRateMult * dt, hp.maxHp);
         hp.maxHp -= bite;
         income += (bite * D.huskYield) / dt;
         if (hp.maxHp <= 0) other.version++; // consumed: the husk crumbles away
@@ -266,8 +300,13 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
           }
         }
       }
+      // Nightbloom: domes standing in rock shadow ripen twice as fast
+      let gloom = 1;
+      if (mods.nightbloom && !isLit(add(plant.astPos, p.tip), toSun, world.asteroids)) {
+        gloom = 2;
+      }
       const take = Math.min(
-        R.chargeRate * mods.chargeRate * pollinate * dt,
+        R.chargeRate * mods.chargeRate * pollinate * gloom * dt,
         Math.max(plant.energy - f.energy.reserve, 0),
         R.coneEnergy - p.charge,
       );
@@ -460,7 +499,7 @@ function growDomeOnMycelium(
     maxAge: 0,
     charge: 0,
     armedAt: -1,
-    infected: false,
+    infectedBy: -1,
     shade: 0,
     group: 0,
   });
@@ -499,7 +538,7 @@ function growCone(plant: Plant, f: FactionDef, mods: Mods): boolean {
     maxAge: 0,
     charge: 0,
     armedAt: -1,
-    infected: false,
+    infectedBy: -1,
     shade: 0,
     group: stem.group,
   });
@@ -525,7 +564,7 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
   const aim = dir ?? autoAim(world, plant, from, range);
   if (!aim) return false; // hold fire until something is in range (or the player aims)
 
-  const fan = R.sporeFan ?? 1;
+  const fan = (R.sporeFan ?? 1) + mods.sporeFanAdd + (mods.twinPayload ? 1 : 0);
   for (let i = 0; i < fan; i++) {
     const spread = (i - (fan - 1) / 2) * 0.22;
     world.seeds.push({
@@ -771,6 +810,29 @@ export function pruneAlongPath(world: World, plant: Plant, path: Vec2[]): PruneR
     }
   }
   plant.energy = Math.min(plant.energy + refund, plant.capacity);
+
+  // Succulence: pruned flesh lives on — every cut part flies off as a seed
+  const mods = colonyMods(world.colonies.find((c) => c.id === plant.colonyId));
+  if (mods.succulence) {
+    let sown = 0;
+    for (const part of plant.parts) {
+      if (!(wasAlive[part.id] && part.dead) || part.kind === 'root') continue;
+      if (sown >= 5) break; // a hedge, not a shotgun
+      sown++;
+      const from = add(plant.astPos, part.tip);
+      world.seeds.push({
+        id: world.nextId++,
+        colonyId: plant.colonyId,
+        faction: plant.faction,
+        pos: { ...from },
+        vel: scale(rot(part.dir, plant.rng.range(-0.5, 0.5)), 85),
+        age: 0,
+        maxAge: 2.6,
+        riding: -1,
+      });
+      emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });
+    }
+  }
   return { cut, refund };
 }
 
@@ -805,7 +867,7 @@ function addRoot(plant: Plant, f: FactionDef, mods: Mods): void {
     maxAge: 0,
     charge: 0,
     armedAt: -1,
-    infected: false,
+    infectedBy: -1,
     shade: 0,
     group: 0,
   });
@@ -861,7 +923,7 @@ function extendTrunk(plant: Plant, f: FactionDef, toSun: Vec2, mods: Mods): void
     maxAge: 0,
     charge: 0,
     armedAt: -1,
-    infected: false,
+    infectedBy: -1,
     shade: 0,
     group: 0,
   });
@@ -916,7 +978,7 @@ function extendBranch(plant: Plant, f: FactionDef, mods: Mods): boolean {
     maxAge: 0,
     charge: 0,
     armedAt: -1,
-    infected: false,
+    infectedBy: -1,
     shade: 0,
     group: 0,
   });
@@ -959,7 +1021,7 @@ function addLeaf(plant: Plant, f: FactionDef, mods: Mods): boolean {
       maxAge: plant.rng.range(f.life.leafLifespan[0], f.life.leafLifespan[1]),
       charge: 0,
       armedAt: -1,
-      infected: false,
+      infectedBy: -1,
       shade: 0,
       group: stem.group, // needles share their branch's occlusion group
     });

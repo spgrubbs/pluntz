@@ -1,16 +1,19 @@
 import type { Colony, World } from '../sim/types';
-import { TRAITS } from '../content/traits';
-import { buyTrait } from '../sim/stats';
+import { MUTATIONS, MUTATION_TIMING, mutationDef } from '../content/mutations';
+import { chooseMutation } from '../sim/stats';
 
 /**
- * The evolution panel: essence, the trait tree, and the two instinct
- * sliders. Opened from the ⬡ button; player colony only.
+ * The evolution panel. Its heart is the mutation offer: when the clock
+ * deals the player two cards, they appear here (the panel auto-opens from
+ * main.ts) and the player picks one. Below that: owned mutations and the
+ * two instinct sliders. Essence is now purely verb fuel (Bless/Lure).
  */
 export class TraitPanel {
   private el: HTMLElement;
   private listEl: HTMLElement;
   private essenceEl: HTMLElement;
   private open = false;
+  private lastKey = '';
 
   constructor(
     private getWorld: () => World,
@@ -64,6 +67,7 @@ export class TraitPanel {
         c.instincts.vertical * 100,
       );
     }
+    this.lastKey = '';
     this.rebuild();
   }
 
@@ -77,38 +81,93 @@ export class TraitPanel {
   }
 
   private rebuild(): void {
+    const world = this.getWorld();
     const c = this.colony();
     if (!c) return;
     this.listEl.innerHTML = '';
-    for (const t of TRAITS[c.faction] ?? []) {
-      const owned = c.traits.includes(t.id);
-      const row = document.createElement('div');
-      row.className = `tp-trait${owned ? ' owned' : ''}`;
-      row.innerHTML = `
-        <div class="tp-trait-top">
-          <b>${t.name}</b>
-          <span>${owned ? '✓' : `${t.cost}⬡`}</span>
-        </div>
-        <p>${t.desc}</p>`;
-      if (!owned) {
-        row.addEventListener('click', () => {
-          if (buyTrait(this.getWorld(), c.id, t.id)) this.rebuild();
+
+    if (c.pendingOffer) {
+      const head = document.createElement('div');
+      head.className = 'tp-offer-head';
+      head.textContent = '🧬 MUTATION — choose one';
+      this.listEl.appendChild(head);
+      for (const id of c.pendingOffer) {
+        const m = mutationDef(c.faction, id);
+        if (!m) continue;
+        const card = document.createElement('div');
+        card.className = 'tp-trait tp-offer';
+        card.innerHTML = `
+          <div class="tp-trait-top">
+            <b>${m.name}</b>
+            <span>tier ${m.tier}</span>
+          </div>
+          <p>${m.desc}</p>`;
+        card.addEventListener('click', () => {
+          if (chooseMutation(world, c.id, id)) this.rebuild();
         });
+        this.listEl.appendChild(card);
       }
-      this.listEl.appendChild(row);
+    } else {
+      const wait = document.createElement('div');
+      wait.className = 'tp-offer-head tp-wait';
+      const pool = (MUTATIONS[c.faction] ?? []).filter(
+        (m) => m.tier <= c.maxTier && !c.mutations.includes(m.id),
+      );
+      wait.textContent =
+        pool.length === 0
+          ? c.maxTier < 3
+            ? '🧬 fully evolved at this depth — win rounds to unlock deeper tiers'
+            : '🧬 fully evolved'
+          : `🧬 next mutation offer in ${this.countdown()}`;
+      this.listEl.appendChild(wait);
+    }
+
+    if (c.mutations.length > 0) {
+      const head = document.createElement('div');
+      head.className = 'tp-owned-head';
+      head.textContent = 'your mutations';
+      this.listEl.appendChild(head);
+      for (const id of c.mutations) {
+        const m = mutationDef(c.faction, id);
+        if (!m) continue;
+        const row = document.createElement('div');
+        row.className = 'tp-trait owned';
+        row.innerHTML = `
+          <div class="tp-trait-top">
+            <b>${m.name}</b>
+            <span>✓ t${m.tier}</span>
+          </div>
+          <p>${m.desc}</p>`;
+        this.listEl.appendChild(row);
+      }
+    }
+    if (c.maxTier < 3) {
+      const note = document.createElement('p');
+      note.className = 'tp-tier-note';
+      note.textContent = `tier ${c.maxTier + 1} locked — win ${c.maxTier} round${c.maxTier === 1 ? '' : 's'} with this clade to unlock`;
+      this.listEl.appendChild(note);
     }
   }
 
-  /** Per-frame: essence readout + affordability classes. */
+  private countdown(): string {
+    const world = this.getWorld();
+    const c = this.colony();
+    if (!c) return '';
+    if (c.nextMutationAt >= MUTATION_TIMING.never) return '—';
+    const s = Math.max(0, Math.ceil(c.nextMutationAt - world.time));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  /** Per-frame: essence readout; rebuild when the offer state changes. */
   update(): void {
     if (!this.open) return;
     const c = this.colony();
     if (!c) return;
     this.essenceEl.textContent = `${c.essence}⬡`;
-    const rows = this.listEl.querySelectorAll<HTMLElement>('.tp-trait:not(.owned)');
-    const defs = (TRAITS[c.faction] ?? []).filter((t) => !c.traits.includes(t.id));
-    rows.forEach((row, i) => {
-      row.classList.toggle('afford', (defs[i]?.cost ?? Infinity) <= c.essence);
-    });
+    const key = `${c.pendingOffer ? c.pendingOffer.join(',') : this.countdown()}:${c.mutations.length}`;
+    if (key !== this.lastKey) {
+      this.lastKey = key;
+      this.rebuild();
+    }
   }
 }
