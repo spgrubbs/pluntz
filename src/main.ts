@@ -15,6 +15,7 @@ import { PlantView } from './render/plantView';
 import { DebrisView } from './render/debrisView';
 import { PruneView } from './render/pruneView';
 import { FxView } from './render/fxView';
+import { FogView } from './render/fogView';
 import { FaunaView } from './render/faunaView';
 import { SeedView } from './render/seedView';
 import { PingView } from './render/pingView';
@@ -85,6 +86,7 @@ async function boot(): Promise<void> {
   const faunaView = new FaunaView();
   const seedView = new SeedView();
   const pingView = new PingView();
+  const fogView = new FogView();
   const aimG = new Graphics();
   worldRoot.addChild(
     worldView.container,
@@ -93,6 +95,7 @@ async function boot(): Promise<void> {
     seedView.g,
     faunaView.g,
     fxView.g,
+    fogView.container, // the veil sits over the world, under the player's own marks
     pingView.g,
     pruneView.g,
     aimG,
@@ -523,6 +526,10 @@ async function boot(): Promise<void> {
     fxView.ambientWounds(world, frame);
     fxView.ambientFlow(world, frame);
     fxView.update(frame);
+
+    // fog of war: only on maps that ask for it (render-only veil)
+    fogView.enabled = !!map.fog;
+    fogView.update(world, playerColonyId, app.renderer);
 
     // an actively-aimed cone never self-fires out from under the player
     if (aiming) {

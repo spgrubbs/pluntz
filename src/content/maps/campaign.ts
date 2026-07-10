@@ -29,6 +29,44 @@ export const C01_FIRST_LIGHT: MapDef = {
   ],
 };
 
+/** Campaign IV — Terra Incognita: a huge fogged frontier. You see only what
+ * your colony, your seeds and your couriers are near; the rest of the map is
+ * rumor. A rival grows unseen, scarabs quietly redraw the rocks, and Ping and
+ * Lure double as scouting flares. */
+export const C04_TERRA_INCOGNITA: MapDef = {
+  id: 'c04',
+  name: 'IV · Terra Incognita',
+  width: 2600,
+  height: 2000,
+  sun: { angleDeg: 210, cycle: true, cyclePeriodSec: 340 },
+  debris: { perMin: 5 },
+  fog: true,
+  fauna: { frugivora: 2, phytophaga: 2, anthophila: 3, scarabaeidae: 2, araneae: 1 },
+  roundSec: 780,
+  canopyWin: { share: 0.6, holdSec: 75 },
+  asteroids: [
+    { x: -1050, y: 620, r: 100 }, // home, tucked in a dark corner
+    { x: -620, y: 260, r: 80 },
+    { x: -780, y: -420, r: 70, rich: true },
+    { x: -260, y: -140, r: 95 },
+    { x: -100, y: 720, r: 75 },
+    { x: 350, y: 350, r: 85 },
+    { x: 420, y: -560, r: 110, rich: true },
+    { x: 150, y: -820, r: 60 },
+    { x: 900, y: -250, r: 90 },
+    { x: 1080, y: 480, r: 100 }, // somewhere out there, the rival
+    { x: 700, y: 800, r: 65 },
+  ],
+  colonies: [
+    { name: 'Verdance', faction: 'pinophyta', player: true, palette: 0 },
+    { name: 'The Unseen', faction: 'anthophyta', palette: 1 },
+  ],
+  spawns: [
+    { asteroid: 0, anchorDeg: -90, colony: 0 },
+    { asteroid: 9, anchorDeg: -90, colony: 1 },
+  ],
+};
+
 /** Campaign III — the Gloom: a clustered crescent of rocks where a fungal
  * empire is already established. Their spores hop; your seeds must arc. */
 export const C03_GLOOMFALL: MapDef = {

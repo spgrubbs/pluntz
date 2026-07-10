@@ -452,20 +452,29 @@ essence), Puppet Bloom (infection kills burst into your spores — `Part.infecte
 unlocks at t−1 wins, AI mirrors the player's depth, and the menu shows ★wins/tier per
 clade. Palette-swap unlocks remain future work.
 
-### 13.4 Richer fauna ecology
+### 13.4 Richer fauna ecology *(scarab + spider shipped)*
 - **Satiety + harder bites + wandering + curved flight + working Lure**: done in M9.1.
 - **New neutral actors** that change the environment, not just eat it:
   - **Scarab/dung-beetle** — slowly *pushes an asteroid*, redrawing the light map and
-    territory adjacencies (a moving board).
+    territory adjacencies (a moving board). **Shipped as Scarabaeidae**: rests, braces
+    against a rim, shoves ~3 u/s for 22–40s stints; never shoves rocks into each other or
+    off the map; asteroid positions joined hashWorld as live state.
   - **Spider** — nests inside a plant and *kills other fauna* that come near (rent-a-guard;
-    who does it protect?).
-  - **Pollinator upgrades**, carrion-eaters that race the detritivore for husks, etc.
+    who does it protect?). **Shipped as Araneae**: claims a grown plant (>11 live parts),
+    strikes anything within reach of its perch — guards the host from grazers but also
+    murders pollinators and couriers. Kills feed the fauna respawn queue.
+  - Still open: **pollinator upgrades**, carrion-eaters that race the detritivore for husks.
 
-### 13.5 Atmosphere & the indifferent void
+### 13.5 Atmosphere & the indifferent void *(fog shipped)*
 The game should feel larger and less controllable:
 - **Fog of war / unexplored space**: reveal only near your colony + your fauna; distant
   rocks are rumor until a seed or bird reaches them. (Render-only mask — does not touch sim
-  determinism; sim always simulates the whole map.)
+  determinism; sim always simulates the whole map.) **Shipped as a per-map feature, not
+  omnipresent** (`MapDef.fog`): a low-res erase-blend veil (soft edges from upscaling)
+  revealed by your plants, flying seeds, seed-carrying birds, and your Ping/Lure — which
+  double as scouting flares on fogged maps. Unrevealed things bleed through faintly as
+  rumor. Debuts on **C04 · Terra Incognita**: a huge fogged frontier with a cycling sun,
+  two scarabs redrawing the rocks, and a rival growing unseen.
 - **Bigger maps** with more happening off-screen: drifting derelict husks, spore storms,
   wandering megafauna, debris fields — events you react to, not cause.
 - Sound/music pass for mood (procedural, same manifest pattern as art).
@@ -477,5 +486,6 @@ fungal spore reach.
 ---
 
 *Current state: M0–M9 shipped + M9.1 polish + §13.1 (fungal mycelium redesign) + §13.3
-(time-gated Mutations + metaprogression). Next candidates: §13.2 (fungal identity split),
-§13.4 (new fauna), §13.5 (fog of war / atmosphere).*
+(time-gated Mutations + metaprogression) + §13.4 (Scarabaeidae & Araneae) + §13.5 fog of
+war (per-map, debuting on C04). Next candidates: §13.2 (fungal identity split), remaining
+§13.5 atmosphere (off-screen events, sound), M10 Android wrap.*
