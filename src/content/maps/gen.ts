@@ -65,7 +65,7 @@ export function generateSkirmish(seed: number): MapDef {
       cyclePeriodSec: 300,
     },
     debris: { perMin: rng.range(1.2, 2.6) },
-    fauna: { frugivora: 2, phytophaga: 2, anthophila: 3 },
+    fauna: { frugivora: 2, phytophaga: 2, anthophila: 3, scarabaeidae: 1, araneae: 1 },
     roundSec: 600,
     canopyWin: { share: 0.55, holdSec: 45 },
     asteroids: rocks,

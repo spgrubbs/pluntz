@@ -160,15 +160,21 @@ export interface Ping {
   expires: number;
 }
 
-export type FaunaKind = 'frugivora' | 'phytophaga' | 'anthophila';
+export type FaunaKind =
+  | 'frugivora'
+  | 'phytophaga'
+  | 'anthophila'
+  | 'scarabaeidae' // rock-shover: slowly pushes asteroids, redrawing the map
+  | 'araneae'; // nesting hunter: kills fauna near its host plant
 
-/** Neutral critters: birds that carry fruit-seeds, grazers, pollinator motes. */
+/** Neutral critters: birds that carry fruit-seeds, grazers, pollinator motes,
+ * rock-shoving scarabs, and plant-nesting spiders. */
 export interface Fauna {
   id: number;
   kind: FaunaKind;
   pos: Vec2;
   vel: Vec2;
-  state: 'wander' | 'toFruit' | 'deliver' | 'graze';
+  state: 'wander' | 'toFruit' | 'deliver' | 'graze' | 'push' | 'nest';
   targetPlant: number; // plant id, -1 none
   targetPart: number; // part id, -1 none
   targetAst: number; // asteroid id, -1 none
@@ -235,8 +241,11 @@ export interface MapDef {
   height: number;
   sun: { angleDeg: number; cycle: boolean; cyclePeriodSec: number };
   debris?: { perMin: number };
-  fauna?: { frugivora: number; phytophaga: number; anthophila: number };
+  fauna?: Partial<Record<FaunaKind, number>>;
   roundSec?: number;
+  /** Fog of war: a special feature of a few maps, not omnipresent. Render-only
+   * veil — the sim always runs the whole map, so determinism is untouched. */
+  fog?: boolean;
   canopyWin?: { share: number; holdSec: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
   colonies: {

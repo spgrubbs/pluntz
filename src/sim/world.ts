@@ -94,17 +94,31 @@ export function createWorld(map: MapDef, seed: number): World {
       createPlant(world, ast, s.anchorDeg * (Math.PI / 180), colony.faction, colony.id),
     );
   }
-  const fauna = map.fauna ?? { frugivora: 0, phytophaga: 0, anthophila: 0 };
-  for (const kind of ['frugivora', 'phytophaga', 'anthophila'] as const) {
-    for (let i = 0; i < fauna[kind]; i++) spawnFauna(world, kind);
+  const fauna = map.fauna ?? {};
+  for (const kind of [
+    'frugivora',
+    'phytophaga',
+    'anthophila',
+    'scarabaeidae',
+    'araneae',
+  ] as const) {
+    for (let i = 0; i < (fauna[kind] ?? 0); i++) spawnFauna(world, kind);
   }
   return world;
 }
 
+const FAUNA_HP: Record<import('./types').FaunaKind, number> = {
+  frugivora: 30,
+  phytophaga: 25,
+  anthophila: 8,
+  scarabaeidae: 45,
+  araneae: 18,
+};
+
 /** Spawn one wild critter at a random spot. Also used by respawns. */
 function spawnFauna(world: World, kind: import('./types').FaunaKind): void {
   const rng = world.rng;
-  const hp = kind === 'frugivora' ? 30 : kind === 'phytophaga' ? 25 : 8;
+  const hp = FAUNA_HP[kind];
   world.fauna.push({
     id: world.nextId++,
     kind,
@@ -136,7 +150,7 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
   return true;
 }
 
-const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70 };
+const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70, scarabaeidae: 42, araneae: 130 };
 const GRAZE_APPEAL = { anthophyta: 3, pinophyta: 0.4, basidiomycota: 0.1 } as const;
 
 function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: number): void {
@@ -465,6 +479,64 @@ function stepFauna(world: World, dt: number): void {
         else faunaWanderTick(world, fn, dt);
         break;
       }
+      case 'scarabaeidae': {
+        // the rock-shover: rests, then picks an asteroid and leans into it
+        // for a long shove. The map is not fixed — light and territory drift.
+        if (fn.state === 'push') stepScarabPush(world, fn, dt);
+        else {
+          faunaWanderTick(world, fn, dt);
+          fn.timer -= dt;
+          if (fn.timer <= 0) {
+            let rock: import('./types').Asteroid | null = null;
+            let bd = 1100;
+            for (const a of world.asteroids) {
+              const d = dist(fn.pos, a.pos) - a.radius;
+              if (d < bd) {
+                bd = d;
+                rock = a;
+              }
+            }
+            if (rock) {
+              fn.state = 'push';
+              fn.targetAst = rock.id;
+              // shove heading: roughly through the rock from where it stands,
+              // so different approaches push the map different ways
+              const h =
+                Math.atan2(rock.pos.y - fn.pos.y, rock.pos.x - fn.pos.x) +
+                world.rng.range(-0.5, 0.5);
+              fn.waypoint = { x: Math.cos(h), y: Math.sin(h) }; // stores the dir
+              fn.timer = world.rng.range(22, 40); // shove duration
+            } else fn.timer = 10;
+          }
+        }
+        break;
+      }
+      case 'araneae': {
+        // the nesting hunter: claims a grown plant and murders any fauna that
+        // strays too close. A resident spider is rent-a-guard — and a curse,
+        // because it does not spare your pollinators or couriers.
+        if (fn.state === 'nest') stepSpiderNest(world, fn, dt);
+        else {
+          faunaWanderTick(world, fn, dt);
+          let host: import('./types').Plant | null = null;
+          let bestSize = 11; // only grown plants make worthy webs
+          for (const p of world.plants) {
+            if (!p.alive) continue;
+            const size = p.parts.reduce((n, q) => n + (q.dead ? 0 : 1), 0);
+            const d = dist(fn.pos, p.astPos);
+            if (size > bestSize && d < 1300) {
+              bestSize = size;
+              host = p;
+            }
+          }
+          if (host) {
+            fn.state = 'nest';
+            fn.targetPlant = host.id;
+            fn.targetPart = -1;
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -480,6 +552,98 @@ function stepFauna(world: World, dt: number): void {
     if (world.time < world.faunaRespawns[i].at) continue;
     const r = world.faunaRespawns.splice(i, 1)[0];
     spawnFauna(world, r.kind);
+  }
+}
+
+/** One tick of a Scarabaeidae shoving its rock along the stored heading. */
+function stepScarabPush(world: World, fn: import('./types').Fauna, dt: number): void {
+  const ast = world.asteroids.find((a) => a.id === fn.targetAst);
+  if (!ast) {
+    fn.state = 'wander';
+    return;
+  }
+  const dir = fn.waypoint; // unit heading chosen when the shove began
+  // the shove point: on the rim, opposite the direction of travel
+  const contact = {
+    x: ast.pos.x - dir.x * (ast.radius + 8),
+    y: ast.pos.y - dir.y * (ast.radius + 8),
+  };
+  const d = dist(fn.pos, contact);
+  if (d > 16) {
+    steer(fn, contact, FAUNA_SPEED.scarabaeidae, dt);
+  } else {
+    // braced and shoving: the rock creeps, the beetle rides the rim
+    fn.timer -= dt;
+    let vx = dir.x * TUNING.world.scarabPush * dt;
+    let vy = dir.y * TUNING.world.scarabPush * dt;
+    // never shove a rock into another rock or off the map
+    const nx = ast.pos.x + vx;
+    const ny = ast.pos.y + vy;
+    for (const o of world.asteroids) {
+      if (o.id === ast.id) continue;
+      if (Math.hypot(o.pos.x - nx, o.pos.y - ny) < o.radius + ast.radius + 60) {
+        fn.timer = 0;
+        vx = 0;
+        vy = 0;
+        break;
+      }
+    }
+    if (Math.abs(nx) > world.width * 0.46 || Math.abs(ny) > world.height * 0.46) {
+      fn.timer = 0;
+      vx = 0;
+      vy = 0;
+    }
+    ast.pos.x += vx;
+    ast.pos.y += vy;
+    fn.pos.x = contact.x + vx;
+    fn.pos.y = contact.y + vy;
+    fn.vel.x = dir.x * 10; // face the work (render orientation)
+    fn.vel.y = dir.y * 10;
+    if (fn.timer <= 0) {
+      fn.state = 'wander';
+      fn.targetAst = -1;
+      fn.timer = world.rng.range(35, 70); // a long rest between shoves
+    }
+  }
+}
+
+/** One tick of an Araneae holding its nest and striking at passing fauna. */
+function stepSpiderNest(world: World, fn: import('./types').Fauna, dt: number): void {
+  const host = world.plants.find((p) => p.id === fn.targetPlant);
+  if (!host || !host.alive) {
+    fn.state = 'wander';
+    fn.targetPlant = -1;
+    return;
+  }
+  const perch = add(host.astPos, host.parts[host.trunkTip].tip);
+  // prey check: the nearest other critter inside the web's reach
+  let prey: import('./types').Fauna | null = null;
+  let bd: number = TUNING.world.spiderReach;
+  for (const o of world.fauna) {
+    if (o === fn || o.kind === 'araneae') continue;
+    const d = dist(o.pos, perch);
+    if (d < bd) {
+      bd = d;
+      prey = o;
+    }
+  }
+  if (prey) {
+    steer(fn, prey.pos, FAUNA_SPEED.araneae, dt);
+    if (dist(fn.pos, prey.pos) < 13) {
+      prey.hp -= 26 * dt; // venom works fast; the death sweep handles the rest
+      prey.vel.x *= 0.85; // tangled in silk
+      prey.vel.y *= 0.85;
+      if (world.tick % 5 === 0) {
+        emit({ type: 'impact', x: prey.pos.x, y: prey.pos.y, power: 4 });
+      }
+    }
+  } else {
+    // no prey: drift back to the perch and lie in wait
+    if (dist(fn.pos, perch) > 10) steer(fn, perch, FAUNA_SPEED.araneae * 0.4, dt);
+    else {
+      fn.vel.x *= 0.8;
+      fn.vel.y *= 0.8;
+    }
   }
 }
 
@@ -1065,6 +1229,10 @@ export function hashWorld(world: World): number {
   };
   mix(world.tick);
   mix(world.sun.angle * 10000);
+  for (const a of world.asteroids) {
+    mix(a.pos.x); // scarabs move rocks: their positions are live state
+    mix(a.pos.y);
+  }
   for (const p of world.plants) {
     mix(p.energy * 100);
     mix(p.parts.length);

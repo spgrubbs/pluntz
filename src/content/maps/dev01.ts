@@ -11,7 +11,7 @@ export const DEV01: MapDef = {
   height: 1600,
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 240 },
   debris: { perMin: 1.5 },
-  fauna: { frugivora: 1, phytophaga: 1, anthophila: 2 },
+  fauna: { frugivora: 1, phytophaga: 1, anthophila: 2, scarabaeidae: 1, araneae: 1 },
   asteroids: [
     { x: 0, y: 120, r: 95, rich: false }, // home rock
     { x: -520, y: -260, r: 70 },

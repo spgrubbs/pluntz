@@ -18,6 +18,16 @@ const FAUNA_INFO: Record<Fauna['kind'], { name: string; gloss: string; desc: str
     gloss: 'pollinator mote',
     desc: 'Neutral pollinator. Drifts between flowers; a visited flower blooms nearly twice as fast.',
   },
+  scarabaeidae: {
+    name: 'Scarabaeidae',
+    gloss: 'rock-shover',
+    desc: 'Neutral titan. Braces against an asteroid and shoves for minutes at a time — the map is not fixed, and neither are your shadows.',
+  },
+  araneae: {
+    name: 'Araneae',
+    gloss: 'nesting hunter',
+    desc: 'Neutral ambusher. Nests in a grown plant and kills any fauna that strays near — a guard against grazers that also murders your pollinators and couriers.',
+  },
 };
 
 /**
@@ -89,6 +99,14 @@ export class Inspector {
         return plant
           ? `grazing on ${colonyName(plant.colonyId)}'s foliage`
           : 'looking for a meal';
+      }
+      case 'push':
+        return 'shoving an asteroid across the void';
+      case 'nest': {
+        const host = world.plants.find((p) => p.id === fn.targetPlant);
+        return host
+          ? `nesting in ${colonyName(host.colonyId)}'s garden, watching for prey`
+          : 'seeking a new nest';
       }
       default:
         return world.lure && fn.kind !== 'anthophila'

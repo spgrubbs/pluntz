@@ -21,6 +21,8 @@ export const TUNING = {
   world: {
     asteroidVerts: [10, 15] as [number, number], // min/max polygon vertices
     asteroidRoughness: 0.16, // radial jitter fraction
+    scarabPush: 3.2, // units/s a Scarabaeidae shoves an asteroid
+    spiderReach: 120, // Araneae strike radius around its nest perch
   },
 
   colony: {

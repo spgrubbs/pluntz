@@ -54,6 +54,43 @@ export class FaunaView {
           g.circle(fn.pos.x, fn.pos.y, 2.4).fill({ color: 0xdde6fa, alpha: 0.9 });
           break;
         }
+        case 'scarabaeidae': {
+          // the rock-shover: a broad horned titan. Straining legs while pushing.
+          const strain = fn.state === 'push' ? Math.sin(world.time * 6 + fn.id) * 1.6 : 0;
+          g.circle(fn.pos.x, fn.pos.y, 13).fill({ color: 0x8a7f6a });
+          g.moveTo(...P(-11, 0)).lineTo(...P(9, 0)).stroke({ width: 1.2, color: 0x6b6252 });
+          g.circle(...P(8, 0), 7).fill({ color: 0x6b6252 });
+          // the horn, thrown forward into the work
+          g.poly([...P(12, -2.5), ...P(22 + strain, 0), ...P(12, 2.5)]).fill({ color: 0x55503f });
+          for (const lx of [-8, -1, 6]) {
+            g.moveTo(...P(lx, -12)).lineTo(...P(lx - 3 - strain, -16)).stroke({ width: 1.8, color: 0x55503f });
+            g.moveTo(...P(lx, 12)).lineTo(...P(lx - 3 - strain, 16)).stroke({ width: 1.8, color: 0x55503f });
+          }
+          // effort motes while shoving
+          if (fn.state === 'push') {
+            const k = (world.time * 3 + fn.id) % 1;
+            g.circle(...P(-15 - k * 10, (fn.id % 2 ? 1 : -1) * 4), 1.6 * (1 - k)).fill({
+              color: 0xcfc4a8,
+              alpha: 0.5 * (1 - k),
+            });
+          }
+          break;
+        }
+        case 'araneae': {
+          // the nesting hunter: a small dark body on long angular legs
+          const crouch = Math.sin(world.time * 3 + fn.id) * 0.8;
+          for (const s of [-1, 1]) {
+            for (const [ox, oy] of [[7, 3], [3, 7], [-3, 7], [-7, 4]] as const) {
+              g.moveTo(fn.pos.x, fn.pos.y)
+                .lineTo(fn.pos.x + ox * 1.6, fn.pos.y + s * (oy * 1.6 + crouch))
+                .stroke({ width: 1.1, color: 0x4a3550 });
+            }
+          }
+          g.circle(fn.pos.x, fn.pos.y, 4.5).fill({ color: 0x5e4468 });
+          g.circle(fn.pos.x + 3, fn.pos.y, 2.6).fill({ color: 0x77558a });
+          g.circle(fn.pos.x + 4, fn.pos.y - 1, 0.9).fill({ color: 0xd7b8ff });
+          break;
+        }
       }
     }
   }
