@@ -26,7 +26,12 @@ const FAUNA_INFO: Record<Fauna['kind'], { name: string; gloss: string; desc: str
   araneae: {
     name: 'Araneae',
     gloss: 'nesting hunter',
-    desc: 'Neutral ambusher. Nests in a grown plant and kills any fauna that strays near — a guard against grazers that also murders your pollinators and couriers.',
+    desc: 'Neutral ambusher. Nests in a grown plant, webs any fauna that strays near and reels it in to eat — big bugs can tear free. A Lure tugs it off its nest.',
+  },
+  lampyridae: {
+    name: 'Lampyridae',
+    gloss: 'wandering lantern',
+    desc: 'Neutral light-bearer. Shaded leaves near its glow earn full sun income. Utterly lure-bound — the shepherd\u2019s portable sun.',
   },
 };
 
@@ -104,6 +109,7 @@ export class Inspector {
         return 'shoving an asteroid across the void';
       case 'nest': {
         const host = world.plants.find((p) => p.id === fn.targetPlant);
+        if (fn.webPrey >= 0) return 'reeling a catch back to the web';
         return host
           ? `nesting in ${colonyName(host.colonyId)}'s garden, watching for prey`
           : 'seeking a new nest';

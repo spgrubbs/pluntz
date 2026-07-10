@@ -22,7 +22,8 @@ export const TUNING = {
     asteroidVerts: [10, 15] as [number, number], // min/max polygon vertices
     asteroidRoughness: 0.16, // radial jitter fraction
     scarabPush: 3.2, // units/s a Scarabaeidae shoves an asteroid
-    spiderReach: 120, // Araneae strike radius around its nest perch
+    spiderReach: 120, // Araneae web-shot radius around its nest perch
+    lampLight: 150, // Lampyridae glow radius: shaded leaves inside count as lit
   },
 
   colony: {

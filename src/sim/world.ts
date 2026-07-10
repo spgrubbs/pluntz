@@ -99,6 +99,7 @@ export function createWorld(map: MapDef, seed: number): World {
     'anthophila',
     'scarabaeidae',
     'araneae',
+    'lampyridae',
   ] as const) {
     for (let i = 0; i < (fauna[kind] ?? 0); i++) spawnFauna(world, kind);
   }
@@ -111,6 +112,7 @@ const FAUNA_HP: Record<import('./types').FaunaKind, number> = {
   anthophila: 8,
   scarabaeidae: 45,
   araneae: 18,
+  lampyridae: 10,
 };
 
 /** Spawn one wild critter at a random spot. Also used by respawns. */
@@ -134,6 +136,7 @@ function spawnFauna(world: World, kind: import('./types').FaunaKind): void {
     maxHp: hp,
     satiety: rng.range(0, 0.3),
     wander: rng.range(0, Math.PI * 2),
+    webPrey: -1,
     orbit: null,
   });
 }
@@ -149,7 +152,7 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
   return true;
 }
 
-const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70, scarabaeidae: 42, araneae: 130 };
+const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70, scarabaeidae: 42, araneae: 130, lampyridae: 60 };
 const GRAZE_APPEAL = { anthophyta: 3, pinophyta: 0.4, basidiomycota: 0.1 } as const;
 
 function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: number): void {
@@ -186,6 +189,35 @@ function steerCurved(
   fn.vel.y += (want.y - fn.vel.y) * k;
   fn.pos.x += fn.vel.x * dt;
   fn.pos.y += fn.vel.y * dt;
+}
+
+/**
+ * The universal Lure: by default a lure tempts EVERY kind of fauna inside its
+ * pull radius (clades/mutations can specialize this later). Returns true when
+ * the critter is answering the scent — the caller skips its usual wandering.
+ */
+function lurePull(
+  world: World,
+  fn: import('./types').Fauna,
+  dt: number,
+  speed: number,
+  maxD = 800,
+): boolean {
+  const l = world.lure;
+  if (!l) return false;
+  const d = Math.hypot(l.x - fn.pos.x, l.y - fn.pos.y);
+  if (d > maxD) return false;
+  if (d < 70) {
+    // arrived: mill about the scent
+    fn.vel.x = fn.vel.x * 0.92 + (l.y - fn.pos.y) * 0.02;
+    fn.vel.y = fn.vel.y * 0.92 - (l.x - fn.pos.x) * 0.02;
+    fn.pos.x += fn.vel.x * dt;
+    fn.pos.y += fn.vel.y * dt;
+    return true;
+  }
+  fn.orbit = null;
+  steerCurved(fn, { x: l.x, y: l.y }, speed, dt, world.time);
+  return true;
 }
 
 /** How appealing is `plant` to a grazer at distance `d`, lure included? */
@@ -336,7 +368,7 @@ function stepFauna(world: World, dt: number): void {
     switch (fn.kind) {
       case 'frugivora': {
         if (fn.state === 'wander') {
-          faunaWanderTick(world, fn, dt);
+          if (!lurePull(world, fn, dt, FAUNA_SPEED.frugivora)) faunaWanderTick(world, fn, dt);
           const fruit = findRipeFruit(world, fn);
           if (fruit) {
             fn.state = 'toFruit';
@@ -400,7 +432,7 @@ function stepFauna(world: World, dt: number): void {
               fn.state = 'graze';
               fn.targetPlant = target.id;
               fn.targetPart = -1;
-            }
+            } else lurePull(world, fn, dt, FAUNA_SPEED.phytophaga);
           }
         } else if (fn.state === 'graze') {
           const plant = world.plants.find((p) => p.id === fn.targetPlant);
@@ -474,8 +506,11 @@ function stepFauna(world: World, dt: number): void {
             }
           }
         }
-        if (flower) steer(fn, flower, FAUNA_SPEED.anthophila, dt);
-        else faunaWanderTick(world, fn, dt);
+        if (flower && !world.lure) steer(fn, flower, FAUNA_SPEED.anthophila, dt);
+        else if (!lurePull(world, fn, dt, FAUNA_SPEED.anthophila)) {
+          if (flower) steer(fn, flower, FAUNA_SPEED.anthophila, dt);
+          else faunaWanderTick(world, fn, dt);
+        }
         break;
       }
       case 'scarabaeidae': {
@@ -483,13 +518,18 @@ function stepFauna(world: World, dt: number): void {
         // for a long shove. The map is not fixed — light and territory drift.
         if (fn.state === 'push') stepScarabPush(world, fn, dt);
         else {
-          faunaWanderTick(world, fn, dt);
+          if (!lurePull(world, fn, dt, FAUNA_SPEED.scarabaeidae * 1.6)) {
+            faunaWanderTick(world, fn, dt);
+          }
           fn.timer -= dt;
           if (fn.timer <= 0) {
+            // a fresh scent redirects the titan: it shoves the rock nearest
+            // the lure (toward the scent) — the shepherd's tow-cable
+            const ref = world.lure ? { x: world.lure.x, y: world.lure.y } : fn.pos;
             let rock: import('./types').Asteroid | null = null;
             let bd = 1100;
             for (const a of world.asteroids) {
-              const d = dist(fn.pos, a.pos) - a.radius;
+              const d = dist(ref, a.pos) - a.radius;
               if (d < bd) {
                 bd = d;
                 rock = a;
@@ -498,11 +538,12 @@ function stepFauna(world: World, dt: number): void {
             if (rock) {
               fn.state = 'push';
               fn.targetAst = rock.id;
-              // shove heading: roughly through the rock from where it stands,
-              // so different approaches push the map different ways
-              const h =
-                Math.atan2(rock.pos.y - fn.pos.y, rock.pos.x - fn.pos.x) +
-                world.rng.range(-0.5, 0.5);
+              // shove heading: through the rock from where it stands — or,
+              // when a lure is out, toward the scent itself
+              const h = world.lure
+                ? Math.atan2(world.lure.y - rock.pos.y, world.lure.x - rock.pos.x)
+                : Math.atan2(rock.pos.y - fn.pos.y, rock.pos.x - fn.pos.x) +
+                  world.rng.range(-0.5, 0.5);
               fn.waypoint = { x: Math.cos(h), y: Math.sin(h) }; // stores the dir
               fn.timer = world.rng.range(22, 40); // shove duration
             } else fn.timer = 10;
@@ -514,8 +555,24 @@ function stepFauna(world: World, dt: number): void {
         // the nesting hunter: claims a grown plant and murders any fauna that
         // strays too close. A resident spider is rent-a-guard — and a curse,
         // because it does not spare your pollinators or couriers.
+        // the scent is irresistible even to the ambusher: a lure within reach
+        // tugs it off its nest — this is how a shepherd evicts a spider
+        if (fn.state === 'nest' && world.lure) {
+          const host = world.plants.find((p) => p.id === fn.targetPlant);
+          const dSelf = Math.hypot(world.lure.x - fn.pos.x, world.lure.y - fn.pos.y);
+          const dNest = host
+            ? Math.hypot(world.lure.x - host.astPos.x, world.lure.y - host.astPos.y)
+            : Infinity;
+          if (Math.min(dSelf, dNest) < 800) {
+            fn.state = 'wander';
+            fn.targetPlant = -1;
+            fn.webPrey = -1;
+          }
+        }
         if (fn.state === 'nest') stepSpiderNest(world, fn, dt);
-        else {
+        else if (lurePull(world, fn, dt, FAUNA_SPEED.araneae * 0.5, 1200)) {
+          /* answering the scent — it renests only after the lure fades */
+        } else {
           faunaWanderTick(world, fn, dt);
           let host: import('./types').Plant | null = null;
           let bestSize = 11; // only grown plants make worthy webs
@@ -536,6 +593,14 @@ function stepFauna(world: World, dt: number): void {
         }
         break;
       }
+      case 'lampyridae': {
+        // the wandering lantern: pure drifting light. Utterly lure-bound —
+        // the shepherd's portable sun for a shaded garden.
+        if (!lurePull(world, fn, dt, FAUNA_SPEED.lampyridae * 1.4)) {
+          faunaWanderTick(world, fn, dt);
+        }
+        break;
+      }
     }
   }
 
@@ -545,6 +610,7 @@ function stepFauna(world: World, dt: number): void {
     if (fn.hp > 0) continue;
     emit({ type: 'shatter', x: fn.pos.x, y: fn.pos.y, power: 6 });
     world.faunaRespawns.push({ kind: fn.kind, at: world.time + 75 });
+    for (const o of world.fauna) if (o.webPrey === fn.id) o.webPrey = -1;
     world.fauna.splice(i, 1);
   }
   for (let i = world.faunaRespawns.length - 1; i >= 0; i--) {
@@ -606,20 +672,76 @@ function stepScarabPush(world: World, fn: import('./types').Fauna, dt: number): 
   }
 }
 
-/** One tick of an Araneae holding its nest and striking at passing fauna. */
+/** Per-second odds that a snared critter rips free of the web — the bigger
+ * the bug, the better its chances. Scarabaeidae never get snared at all. */
+const WEB_ESCAPE: Partial<Record<import('./types').FaunaKind, number>> = {
+  frugivora: 0.45,
+  phytophaga: 0.12,
+  anthophila: 0.02,
+  lampyridae: 0.15,
+};
+
+/**
+ * One tick of an Araneae holding its nest: it shoots a web at fauna inside
+ * reach, reels the catch back to the perch, and eats it there. Larger bugs
+ * can tear free mid-reel (and birds usually do).
+ */
 function stepSpiderNest(world: World, fn: import('./types').Fauna, dt: number): void {
   const host = world.plants.find((p) => p.id === fn.targetPlant);
   if (!host || !host.alive) {
     fn.state = 'wander';
     fn.targetPlant = -1;
+    fn.webPrey = -1;
     return;
   }
   const perch = add(host.astPos, host.parts[host.trunkTip].tip);
-  // prey check: the nearest other critter inside the web's reach
+
+  // hold the perch — the web does the chasing
+  if (dist(fn.pos, perch) > 8) steer(fn, perch, FAUNA_SPEED.araneae * 0.5, dt);
+  else {
+    fn.vel.x *= 0.8;
+    fn.vel.y *= 0.8;
+  }
+
+  if (fn.webPrey >= 0) {
+    const prey = world.fauna.find((o) => o.id === fn.webPrey);
+    if (!prey) {
+      fn.webPrey = -1; // eaten or lost
+      return;
+    }
+    // the struggle: per-second escape roll scaled by the bug's size
+    if (world.rng.next() < (WEB_ESCAPE[prey.kind] ?? 0.1) * dt) {
+      fn.webPrey = -1;
+      const away = norm(sub(prey.pos, perch));
+      prey.vel.x = away.x * 160; // tears free and bolts
+      prey.vel.y = away.y * 160;
+      emit({ type: 'shatter', x: prey.pos.x, y: prey.pos.y, power: 4 });
+      return;
+    }
+    const toPerch = sub(perch, prey.pos);
+    const d = len(toPerch);
+    if (d > 14) {
+      // reel it in: the strand overpowers the prey's own flight
+      const pull = scale(norm(toPerch), 55);
+      prey.pos.x += pull.x * dt;
+      prey.pos.y += pull.y * dt;
+      prey.vel.x *= 0.7;
+      prey.vel.y *= 0.7;
+    } else {
+      prey.hp -= 30 * dt; // dinner at the web's heart
+      if (world.tick % 5 === 0) {
+        emit({ type: 'impact', x: prey.pos.x, y: prey.pos.y, power: 4 });
+      }
+    }
+    return;
+  }
+
+  // web-shot: snare the nearest catchable critter inside reach
   let prey: import('./types').Fauna | null = null;
   let bd: number = TUNING.world.spiderReach;
   for (const o of world.fauna) {
     if (o === fn || o.kind === 'araneae') continue;
+    if (o.kind === 'scarabaeidae') continue; // far too big to snare
     const d = dist(o.pos, perch);
     if (d < bd) {
       bd = d;
@@ -627,22 +749,8 @@ function stepSpiderNest(world: World, fn: import('./types').Fauna, dt: number): 
     }
   }
   if (prey) {
-    steer(fn, prey.pos, FAUNA_SPEED.araneae, dt);
-    if (dist(fn.pos, prey.pos) < 13) {
-      prey.hp -= 26 * dt; // venom works fast; the death sweep handles the rest
-      prey.vel.x *= 0.85; // tangled in silk
-      prey.vel.y *= 0.85;
-      if (world.tick % 5 === 0) {
-        emit({ type: 'impact', x: prey.pos.x, y: prey.pos.y, power: 4 });
-      }
-    }
-  } else {
-    // no prey: drift back to the perch and lie in wait
-    if (dist(fn.pos, perch) > 10) steer(fn, perch, FAUNA_SPEED.araneae * 0.4, dt);
-    else {
-      fn.vel.x *= 0.8;
-      fn.vel.y *= 0.8;
-    }
+    fn.webPrey = prey.id;
+    emit({ type: 'impact', x: prey.pos.x, y: prey.pos.y, power: 5 });
   }
 }
 

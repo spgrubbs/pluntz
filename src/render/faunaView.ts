@@ -77,6 +77,29 @@ export class FaunaView {
           break;
         }
         case 'araneae': {
+          // the web first: a sagging strand out to any reeling catch
+          if (fn.webPrey >= 0) {
+            const prey = world.fauna.find((o) => o.id === fn.webPrey);
+            if (prey) {
+              const mx = (fn.pos.x + prey.pos.x) / 2;
+              const my = (fn.pos.y + prey.pos.y) / 2 + 6; // gravity sag
+              g.moveTo(fn.pos.x, fn.pos.y)
+                .quadraticCurveTo(mx, my, prey.pos.x, prey.pos.y)
+                .stroke({ width: 1.1, color: 0xd8dcf0, alpha: 0.75 });
+              // silk wrap tightening around the catch
+              const wob = Math.sin(world.time * 12) * 1.5;
+              g.circle(prey.pos.x, prey.pos.y, 8 + wob).stroke({
+                width: 1,
+                color: 0xd8dcf0,
+                alpha: 0.55,
+              });
+              g.circle(prey.pos.x, prey.pos.y, 5 - wob * 0.4).stroke({
+                width: 0.8,
+                color: 0xd8dcf0,
+                alpha: 0.4,
+              });
+            }
+          }
           // the nesting hunter: a small dark body on long angular legs
           const crouch = Math.sin(world.time * 3 + fn.id) * 0.8;
           for (const s of [-1, 1]) {
@@ -89,6 +112,21 @@ export class FaunaView {
           g.circle(fn.pos.x, fn.pos.y, 4.5).fill({ color: 0x5e4468 });
           g.circle(fn.pos.x + 3, fn.pos.y, 2.6).fill({ color: 0x77558a });
           g.circle(fn.pos.x + 4, fn.pos.y - 1, 0.9).fill({ color: 0xd7b8ff });
+          break;
+        }
+        case 'lampyridae': {
+          // the wandering lantern: layered warm glow around a bright grain
+          const breathe = 0.75 + 0.25 * Math.sin(world.time * 2.4 + fn.id * 1.7);
+          g.circle(fn.pos.x, fn.pos.y, 26 * breathe).fill({ color: 0xffe9a8, alpha: 0.07 });
+          g.circle(fn.pos.x, fn.pos.y, 14 * breathe).fill({ color: 0xffe9a8, alpha: 0.16 });
+          g.circle(fn.pos.x, fn.pos.y, 7).fill({ color: 0xfff3c4, alpha: 0.45 });
+          g.circle(fn.pos.x, fn.pos.y, 3).fill({ color: 0xfffbe8 });
+          // a hint of body under the light: two dim wings
+          const a2 = Math.atan2(fn.vel.y, fn.vel.x);
+          const wx = -Math.sin(a2) * 4;
+          const wy = Math.cos(a2) * 4;
+          g.circle(fn.pos.x + wx, fn.pos.y + wy, 1.6).fill({ color: 0xc9a24f, alpha: 0.8 });
+          g.circle(fn.pos.x - wx, fn.pos.y - wy, 1.6).fill({ color: 0xc9a24f, alpha: 0.8 });
           break;
         }
       }

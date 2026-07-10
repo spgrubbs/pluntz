@@ -67,6 +67,8 @@ export class FogView {
     }
     for (const fn of world.fauna) {
       if (fn.carryColony === playerColonyId) holes.push({ x: fn.pos.x, y: fn.pos.y, r: 160 });
+      // a Lampyridae is light itself — it burns through anyone's fog
+      if (fn.kind === 'lampyridae') holes.push({ x: fn.pos.x, y: fn.pos.y, r: 190 });
     }
     if (world.ping && world.ping.colonyId === playerColonyId) {
       holes.push({ x: world.ping.x, y: world.ping.y, r: 230 });

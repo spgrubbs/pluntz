@@ -26,7 +26,7 @@ export class WorldView {
     this.rays.blendMode = 'add';
   }
 
-  update(world: World): void {
+  update(world: World, judder?: Map<number, { x: number; y: number }>): void {
     const toSun = toSunVec(world.sun);
     const diag = Math.hypot(world.width, world.height);
     const shadowLen = diag * 1.5;
@@ -53,8 +53,11 @@ export class WorldView {
     const g = this.rocks;
     g.clear();
     for (const a of world.asteroids) {
+      // a scarab's shove makes the whole rock judder (render-only offset)
+      const j = judder?.get(a.id);
+      const apos = j ? { x: a.pos.x + j.x, y: a.pos.y + j.y } : a.pos;
       const world_pts: number[] = [];
-      for (const p of a.shape) world_pts.push(a.pos.x + p.x, a.pos.y + p.y);
+      for (const p of a.shape) world_pts.push(apos.x + p.x, apos.y + p.y);
       g.poly(world_pts).fill({ color: a.rich ? ROCK_FILL_RICH : ROCK_FILL });
 
       // faceted dark side: consecutive vertices facing away from the sun + center
@@ -65,9 +68,9 @@ export class WorldView {
         const facing = dot(p, toSun) / Math.hypot(p.x, p.y);
         if (facing < 0.05) {
           if (!darkPts) darkPts = [];
-          darkPts.push(a.pos.x + p.x, a.pos.y + p.y);
+          darkPts.push(apos.x + p.x, apos.y + p.y);
         } else if (darkPts && darkPts.length >= 4) {
-          darkPts.push(a.pos.x, a.pos.y);
+          darkPts.push(apos.x, apos.y);
           g.poly(darkPts).fill({ color: ROCK_DARK, alpha: 0.5 });
           darkPts = null;
         } else {
@@ -75,7 +78,7 @@ export class WorldView {
         }
       }
       if (darkPts && darkPts.length >= 4) {
-        darkPts.push(a.pos.x, a.pos.y);
+        darkPts.push(apos.x, apos.y);
         g.poly(darkPts).fill({ color: ROCK_DARK, alpha: 0.5 });
       }
 
@@ -86,8 +89,8 @@ export class WorldView {
         const mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
         const facing = dot(mid, toSun) / Math.hypot(mid.x, mid.y);
         if (facing > 0.3) {
-          g.moveTo(a.pos.x + p0.x, a.pos.y + p0.y)
-            .lineTo(a.pos.x + p1.x, a.pos.y + p1.y)
+          g.moveTo(apos.x + p0.x, apos.y + p0.y)
+            .lineTo(apos.x + p1.x, apos.y + p1.y)
             .stroke({ width: 2.5, color: ROCK_RIM_LIT, alpha: 0.28 + facing * 0.45 });
         }
       }
@@ -96,7 +99,7 @@ export class WorldView {
         // mineral veins: sparkle dots
         for (let i = 0; i < 5; i++) {
           const p = a.shape[(i * 3) % n];
-          g.circle(a.pos.x + p.x * 0.55, a.pos.y + p.y * 0.55, 2.2).fill({
+          g.circle(apos.x + p.x * 0.55, apos.y + p.y * 0.55, 2.2).fill({
             color: 0xc9a4ff,
             alpha: 0.8,
           });

@@ -162,6 +162,36 @@ export class FxView {
         }
       }
     }
+    // scarabs grinding rock throw dust and chips from the contact point
+    for (const fn of world.fauna) {
+      if (fn.kind === 'scarabaeidae' && fn.state === 'push' && Math.random() < dt * 16) {
+        this.spawn({
+          x: fn.pos.x + this.rand(-8, 8),
+          y: fn.pos.y + this.rand(-8, 8),
+          vx: -fn.vel.x * 1.4 + this.rand(-18, 18),
+          vy: -fn.vel.y * 1.4 + this.rand(-18, 18),
+          life: 0,
+          maxLife: this.rand(0.5, 1.2),
+          size: this.rand(1.2, 2.4),
+          color: 0xb5a888,
+          drag: 0.9,
+        });
+      }
+      // lanterns shed slow golden sparks
+      if (fn.kind === 'lampyridae' && Math.random() < dt * 7) {
+        this.spawn({
+          x: fn.pos.x + this.rand(-4, 4),
+          y: fn.pos.y + this.rand(-4, 4),
+          vx: this.rand(-7, 7),
+          vy: this.rand(-7, 7),
+          life: 0,
+          maxLife: this.rand(0.8, 1.6),
+          size: 1.4,
+          color: 0xffe9a8,
+          drag: 0.95,
+        });
+      }
+    }
     // faint drifting dust across the void
     if (Math.random() < dt * 3) {
       this.spawn({

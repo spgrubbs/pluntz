@@ -41,7 +41,7 @@ export const C04_TERRA_INCOGNITA: MapDef = {
   sun: { angleDeg: 210, cycle: true, cyclePeriodSec: 340 },
   debris: { perMin: 5 },
   fog: true,
-  fauna: { frugivora: 2, phytophaga: 2, anthophila: 3, scarabaeidae: 2, araneae: 1 },
+  fauna: { frugivora: 2, phytophaga: 2, anthophila: 3, scarabaeidae: 2, araneae: 1, lampyridae: 2 },
   roundSec: 780,
   canopyWin: { share: 0.6, holdSec: 75 },
   asteroids: [

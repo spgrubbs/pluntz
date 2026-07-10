@@ -166,7 +166,8 @@ export type FaunaKind =
   | 'phytophaga'
   | 'anthophila'
   | 'scarabaeidae' // rock-shover: slowly pushes asteroids, redrawing the map
-  | 'araneae'; // nesting hunter: kills fauna near its host plant
+  | 'araneae' // nesting hunter: webs fauna near its host plant and reels them in
+  | 'lampyridae'; // wandering lantern: shaded leaves near it count as lit
 
 /** Neutral critters: birds that carry fruit-seeds, grazers, pollinator motes,
  * rock-shoving scarabs, and plant-nesting spiders. */
@@ -187,6 +188,7 @@ export interface Fauna {
   maxHp: number;
   satiety: number; // 0 hungry .. 1 full; grazers leave when full, return when hungry
   wander: number; // per-individual lateral wander phase (curved flight)
+  webPrey: number; // araneae: fauna id snared in the web, -1 none
   /** Idle flight rides orbits around rocks (looks celestial, is cheap). */
   orbit: { ast: number; r: number; a: number; dir: number } | null;
 }

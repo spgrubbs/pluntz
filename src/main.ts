@@ -553,8 +553,19 @@ async function boot(): Promise<void> {
     worldRoot.position.set(w / 2 - camera.x * camera.zoom, h / 2 - camera.y * camera.zoom);
     starfield.update(camera.x, camera.y, w, h);
 
-    worldView.update(world);
-    plantView.update(world);
+    // rocks being shoved by a braced scarab visibly judder (render-only)
+    const judder = new Map<number, { x: number; y: number }>();
+    for (const fn of world.fauna) {
+      if (fn.kind !== 'scarabaeidae' || fn.state !== 'push') continue;
+      const ast = world.asteroids.find((a) => a.id === fn.targetAst);
+      if (!ast || dist(fn.pos, ast.pos) > ast.radius + 30) continue;
+      judder.set(ast.id, {
+        x: Math.sin(world.time * 43 + ast.id) * 1.2,
+        y: Math.cos(world.time * 37 + ast.id * 2) * 1.2,
+      });
+    }
+    worldView.update(world, judder);
+    plantView.update(world, judder);
     debrisView.update(world);
     seedView.update(world);
     faunaView.update(world);

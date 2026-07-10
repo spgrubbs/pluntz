@@ -41,7 +41,7 @@ export class PlantView {
     this.container.addChild(this.overlay);
   }
 
-  update(world: World): void {
+  update(world: World, judder?: Map<number, { x: number; y: number }>): void {
     const alive = new Set<number>();
     for (const plant of world.plants) {
       alive.add(plant.id);
@@ -54,7 +54,8 @@ export class PlantView {
         this.container.addChildAt(e.g, this.container.children.length - 1); // under overlay
         this.entries.set(plant.id, e);
       }
-      e.g.position.set(ast.pos.x, ast.pos.y);
+      const j = judder?.get(ast.id);
+      e.g.position.set(ast.pos.x + (j?.x ?? 0), ast.pos.y + (j?.y ?? 0));
 
       const starveBand = Math.floor((plant.energy / Math.max(plant.capacity, 1)) * 10);
       const chargeSig = plant.parts

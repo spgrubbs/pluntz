@@ -210,7 +210,18 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
     const bin =
       canopy.bins.get(Math.floor(canopyCross(mid.x, mid.y, toSun) / CANOPY_BIN)) ??
       EMPTY_SEGS;
-    const shade = shadeAt(mid, toSun, world.asteroids, bin, plant.id, p.group);
+    let shade = shadeAt(mid, toSun, world.asteroids, bin, plant.id, p.group);
+    // Lampyridae: a wandering lantern close enough bathes shaded leaves in
+    // its own light — a portable sun the Lure can park over a dark garden
+    if (shade !== 0) {
+      for (const lamp of world.fauna) {
+        if (lamp.kind !== 'lampyridae') continue;
+        if (dist(mid, lamp.pos) < TUNING.world.lampLight) {
+          shade = 0;
+          break;
+        }
+      }
+    }
     if (shade !== p.shade) {
       p.shade = shade;
       plant.version++; // lighting changed -> leaf tint must re-render
