@@ -35,17 +35,11 @@ export const TUNING = {
   },
 
   verbs: {
-    blessCost: 3, // essence
     blessDuration: 25, // seconds of growth surge
     blessIncomeMult: 1.5,
     blessCooldownMult: 0.55,
-  },
-
-  essence: {
-    survivalInterval: 45, // seconds between +1 survival ticks
-    newRockBonus: 3, // first sprout on a rock the colony didn't hold
-    rivalDeathBonus: 2, // paid to each rival when a plant dies
-    starting: 2,
+    /** Verb cooldowns (sim seconds). Clades flavor these via verbHaste. */
+    cooldown: { ping: 12, lure: 70, bless: 55, prune: 20 },
   },
 
   debris: {

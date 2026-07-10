@@ -1,5 +1,6 @@
 import type { Colony, Plant, World } from './types';
 import { MUTATION_TIMING } from '../content/mutations';
+import { FACTIONS } from '../content/factions';
 import { TUNING } from '../content/tuning';
 import { emit } from './events';
 
@@ -34,7 +35,7 @@ export interface Mods {
   virulent: boolean; // infection rots & spreads faster
   huskRateMult: number; // husk digestion speed
   puppetBloom: boolean; // infection kills burst into this colony's spores
-  essenceOnDeathMult: number; // rival-death essence payout multiplier
+  necrosis: boolean; // rival deaths re-knit this colony's verbs (cooldown reset)
 }
 
 export const DEFAULT_MODS: Mods = {
@@ -66,7 +67,7 @@ export const DEFAULT_MODS: Mods = {
   virulent: false,
   huskRateMult: 1,
   puppetBloom: false,
-  essenceOnDeathMult: 1,
+  necrosis: false,
 };
 
 export function colonyMods(colony: Colony | undefined): Mods {
@@ -106,18 +107,26 @@ export function colonyMods(colony: Colony | undefined): Mods {
   if (has('virulence')) m.virulent = true;
   if (has('necrosis')) {
     m.huskRateMult *= 2;
-    m.essenceOnDeathMult = 2;
+    m.necrosis = true;
   }
   if (has('puppetbloom')) m.puppetBloom = true;
-
-  // instinct sliders: Expand <-> Fortify, Spread <-> Tall
-  const e = colony.instincts.expand;
-  const v = colony.instincts.vertical;
-  m.chargeRate *= 0.6 + 0.8 * e;
-  m.partHp *= 1.25 - 0.5 * e;
-  m.trunkTargetMult *= 0.75 + 0.5 * v;
-  if (v < 0.35) m.branchStepsAdd += 1;
   return m;
+}
+
+export type VerbId = 'ping' | 'lure' | 'bless' | 'prune';
+
+/** A verb's full cooldown for this colony (base × clade haste). */
+export function verbCooldown(colony: Colony, verb: VerbId): number {
+  return TUNING.verbs.cooldown[verb] * (FACTIONS[colony.faction].verbHaste?.[verb] ?? 1);
+}
+
+export function verbReady(world: World, colony: Colony, verb: VerbId): boolean {
+  return world.time >= colony.verbReadyAt[verb];
+}
+
+/** Start a verb's cooldown. Call only after the verb actually did something. */
+export function useVerb(world: World, colony: Colony, verb: VerbId): void {
+  colony.verbReadyAt[verb] = world.time + verbCooldown(colony, verb);
 }
 
 /**
@@ -134,13 +143,13 @@ export function chooseMutation(world: World, colonyId: number, mutationId: strin
   return true;
 }
 
-/** Bless: a growth surge on one plant. Costs essence; refuses the dead. */
+/** Bless: a growth surge on one plant. On cooldown; refuses the dead. */
 export function bless(world: World, plant: Plant): boolean {
   const V = TUNING.verbs;
   const colony = world.colonies.find((c) => c.id === plant.colonyId);
-  if (!colony || !plant.alive || colony.essence < V.blessCost) return false;
+  if (!colony || !plant.alive || !verbReady(world, colony, 'bless')) return false;
   if (world.time < plant.blessedUntil) return false; // already surging
-  colony.essence -= V.blessCost;
+  useVerb(world, colony, 'bless');
   plant.blessedUntil = world.time + V.blessDuration;
   plant.version++;
   emit({

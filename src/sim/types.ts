@@ -131,14 +131,13 @@ export interface Colony {
   faction: FactionId;
   isPlayer: boolean;
   palette: number; // index into the faction's palette list
-  essence: number; // the strategic currency: strong verbs (Bless, Lure)
-  rockAwards: number; // fresh-rock essence bonuses already paid (diminishing)
   mutations: string[]; // owned mutation ids (see content/mutations.ts)
-  pendingOffer: string[] | null; // two mutation ids awaiting the player's pick
+  pendingOffer: string[] | null; // mutation ids awaiting the player's pick
   nextMutationAt: number; // sim time the next offer arrives
   maxTier: 1 | 2 | 3; // metaprogression gate: deepest mutation tier available
-  /** Autonomous-policy sliders, both 0..1. */
-  instincts: { expand: number; vertical: number };
+  /** Verbs run on cooldowns (no currency): sim time each one is ready again.
+   * Base durations in TUNING.verbs, flavored per clade by FactionDef.verbHaste. */
+  verbReadyAt: { ping: number; lure: number; bless: number; prune: number };
 }
 
 /** An airborne seed: ballistic, sprouts where it lands. */

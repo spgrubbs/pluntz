@@ -24,7 +24,7 @@ import { DebugPanel } from './ui/debugPanel';
 import { Inspector } from './ui/inspector';
 import { TraitPanel } from './ui/traitPanel';
 import { Menu, type GameConfig } from './ui/menu';
-import { bless } from './sim/stats';
+import { bless, verbReady, useVerb, type VerbId } from './sim/stats';
 import { maxTierFor, recordWin } from './ui/profile';
 
 async function boot(): Promise<void> {
@@ -103,7 +103,10 @@ async function boot(): Promise<void> {
   app.stage.addChild(starfield.container, worldRoot);
 
   // --- Interaction state -------------------------------------------------------
-  let speed = 1;
+  // The garden moves at half of an old dev "1x" — contemplative by default;
+  // the player has explicit speed controls (the debug panel multiplies raw).
+  const PLAY_SPEED = 0.5;
+  let speed = PLAY_SPEED;
   let moveRocks = false;
   let pruneMode = false;
   let pingMode = false;
@@ -128,7 +131,6 @@ async function boot(): Promise<void> {
     return null;
   }
 
-  const homeAst = world.asteroids[0];
   const camera = new Camera(app.canvas, world.width, world.height, {
     onDragStart(worldPos: Vec2): boolean {
       if (pruneMode) {
@@ -162,8 +164,15 @@ async function boot(): Promise<void> {
     },
     onDragEnd(): void {
       if (prunePath) {
-        for (const plant of world.plants) {
-          if (plant.colonyId === playerColonyId) pruneAlongPath(world, plant, prunePath);
+        const pc = world.colonies.find((c) => c.id === playerColonyId);
+        if (pc && verbReady(world, pc, 'prune')) {
+          let cut = 0;
+          for (const plant of world.plants) {
+            if (plant.colonyId === playerColonyId) {
+              cut += pruneAlongPath(world, plant, prunePath).cut;
+            }
+          }
+          if (cut > 0) useVerb(world, pc, 'prune'); // a whiffed swipe is free
         }
         prunePath = null;
         return;
@@ -235,7 +244,7 @@ async function boot(): Promise<void> {
     pingBtn.classList.toggle('active', pingMode);
   });
   const blessBtn = document.createElement('button');
-  blessBtn.textContent = `✦ bless ${TUNING.verbs.blessCost}⬡`;
+  blessBtn.textContent = '✦ bless';
   blessBtn.addEventListener('click', () => {
     blessMode = !blessMode;
     pruneMode = false;
@@ -246,7 +255,7 @@ async function boot(): Promise<void> {
     blessBtn.classList.toggle('active', blessMode);
   });
   const lureBtn = document.createElement('button');
-  lureBtn.textContent = '✿ lure 2⬡';
+  lureBtn.textContent = '✿ lure';
   lureBtn.addEventListener('click', () => {
     lureMode = !lureMode;
     pruneMode = false;
@@ -262,14 +271,11 @@ async function boot(): Promise<void> {
     () => world,
     () => playerColonyId,
   );
-  const traitBtn = document.createElement('button');
-  traitBtn.textContent = '🧬 evolve';
-  traitBtn.addEventListener('click', () => traitPanel.toggle());
   let offerAnnounced = false;
   // verbs live in a collapsible tray so they never cover the inspector
   const verbTray = document.createElement('div');
   verbTray.className = 'verb-tray';
-  verbTray.append(traitBtn, lureBtn, blessBtn, pingBtn, pruneBtn);
+  verbTray.append(lureBtn, blessBtn, pingBtn, pruneBtn);
   const trayToggle = document.createElement('button');
   trayToggle.className = 'tray-toggle';
   let trayOpen = true;
@@ -285,9 +291,42 @@ async function boot(): Promise<void> {
   actionBar.append(verbTray, trayToggle);
   syncTray();
   document.getElementById('ui')!.appendChild(actionBar);
-  camera.x = homeAst.pos.x;
-  camera.y = homeAst.pos.y - 60;
-  camera.zoom = 1.4;
+
+  // --- Player speed control (pause / calm / brisk / rushing) ---------------------
+  const speedBar = document.createElement('div');
+  speedBar.className = 'speedbar';
+  const SPEED_STOPS: { label: string; mult: number }[] = [
+    { label: '⏸', mult: 0 },
+    { label: '▶', mult: 1 },
+    { label: '▶▶', mult: 2 },
+    { label: '▶▶▶', mult: 4 },
+  ];
+  for (const stop of SPEED_STOPS) {
+    const b = document.createElement('button');
+    b.textContent = stop.label;
+    b.dataset.mult = String(stop.mult);
+    b.addEventListener('click', () => {
+      speed = PLAY_SPEED * stop.mult;
+    });
+    speedBar.appendChild(b);
+  }
+  document.getElementById('ui')!.appendChild(speedBar);
+  function syncSpeedBar(): void {
+    speedBar.querySelectorAll<HTMLElement>('button').forEach((b) => {
+      b.classList.toggle('active', Number(b.dataset.mult) * PLAY_SPEED === speed);
+    });
+  }
+
+  /** Open every round looking at your own heartseed, wherever the map put it. */
+  function centerOnHome(): void {
+    const pc = world.colonies.find((c) => c.isPlayer);
+    const home = world.plants.find((p) => p.colonyId === pc?.id) ?? world.plants[0];
+    const ast = home && world.asteroids.find((a) => a.id === home.asteroidId);
+    camera.x = ast ? ast.pos.x : 0;
+    camera.y = (ast ? ast.pos.y : 0) - 60;
+    camera.zoom = 1.4;
+  }
+  centerOnHome();
 
   // --- Debug panel ---------------------------------------------------------------
   const panel = new DebugPanel({
@@ -340,10 +379,11 @@ async function boot(): Promise<void> {
     app.stage.removeChild(starfield.container);
     starfield = new Starfield(world.width, world.height, seed);
     app.stage.addChildAt(starfield.container, 0);
+    centerOnHome();
   }
 
   // --- Save / resume ---------------------------------------------------------------
-  const SAVE_KEY = 'pluntz.save.v2'; // v2: traits -> mutations (old saves are stale)
+  const SAVE_KEY = 'pluntz.save.v3'; // v3: essence -> verb cooldowns
   let lastSaveAt = 0;
   function trySave(): void {
     try {
@@ -381,7 +421,8 @@ async function boot(): Promise<void> {
       starfield = new Starfield(world.width, world.height, world.seed);
       app.stage.addChildAt(starfield.container, 0);
       lastSaveAt = world.time;
-      speed = 1;
+      speed = PLAY_SPEED;
+      centerOnHome();
       return true;
     } catch {
       return false;
@@ -395,7 +436,7 @@ async function boot(): Promise<void> {
     map = buildMap(cfg);
     resetWorld(false);
     lastSaveAt = 0;
-    speed = 1;
+    speed = PLAY_SPEED;
     const qs = new URLSearchParams({
       map: cfg.mapId,
       faction: cfg.playerFaction,
@@ -410,6 +451,8 @@ async function boot(): Promise<void> {
   // --- Round chip + end-of-round banner ------------------------------------------
   const roundChip = document.createElement('div');
   roundChip.className = 'roundchip';
+  roundChip.title = 'evolution — mutations & offers';
+  roundChip.addEventListener('click', () => traitPanel.toggle());
   document.getElementById('ui')!.appendChild(roundChip);
   const banner = document.createElement('div');
   banner.className = 'banner';
@@ -438,8 +481,6 @@ async function boot(): Promise<void> {
     else if (world.roundSec > 0 && world.time > world.roundSec) clock = '☀ THE SUN FADES';
     else if (world.roundSec > 0) clock = `☀ fades in ${fmtTime(world.roundSec - world.time)}`;
     else clock = '';
-    const player = world.colonies.find((c) => c.id === playerColonyId);
-    const essence = player ? ` · ⬡${player.essence}` : '';
     let hold = '';
     if (world.canopyWin && world.canopyHolder >= 0 && world.roundState === 'playing') {
       const h = world.colonies.find((c) => c.id === world.canopyHolder);
@@ -447,7 +488,7 @@ async function boot(): Promise<void> {
       const left = Math.max(0, Math.ceil(world.canopyWin.holdSec - world.canopyHeldSec));
       hold = ` — ◤ ${h?.name} holds ${Math.round((share?.share ?? 0) * 100)}% · ${left}s to win`;
     }
-    roundChip.textContent = `${counts}${essence}${clock ? `  —  ${clock}` : ''}${hold}`;
+    roundChip.textContent = `${counts} 🧬${clock ? `  —  ${clock}` : ''}${hold}`;
 
     if (world.roundState !== 'playing' && !bannerShown) {
       bannerShown = true;
@@ -553,11 +594,27 @@ async function boot(): Promise<void> {
     inspector.update(world);
     traitPanel.update();
     updateRoundUi();
+    syncSpeedBar();
 
-    // a pending mutation offer pulses the evolve button and opens the panel
+    // verb buttons wear their cooldowns openly
     const pc = world.colonies.find((c) => c.id === playerColonyId);
+    const verbBtns: [HTMLButtonElement, VerbId, string][] = [
+      [lureBtn, 'lure', '✿ lure'],
+      [blessBtn, 'bless', '✦ bless'],
+      [pingBtn, 'ping', '◎ ping'],
+      [pruneBtn, 'prune', '✂ prune'],
+    ];
+    for (const [btn, verb, label] of verbBtns) {
+      const left = pc ? pc.verbReadyAt[verb] - world.time : 0;
+      const cooling = left > 0.05;
+      btn.classList.toggle('cooling', cooling);
+      const want = cooling ? `${label} · ${Math.ceil(left)}` : label;
+      if (btn.textContent !== want) btn.textContent = want;
+    }
+
+    // a pending mutation offer pulses the round chip and opens the panel
     const offerWaiting = !!pc?.pendingOffer;
-    traitBtn.classList.toggle('offer', offerWaiting);
+    roundChip.classList.toggle('offer', offerWaiting);
     if (offerWaiting && !offerAnnounced && !menu.isOpen()) {
       offerAnnounced = true;
       traitPanel.show();

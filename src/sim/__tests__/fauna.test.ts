@@ -107,15 +107,12 @@ describe('Anthophyta & fauna (M7)', () => {
     expect(grazer.state).toBe('wander');
   });
 
-  it('lure costs essence and places the scent marker', () => {
+  it('lure places the scent marker, cools down, and expires', () => {
     const w = createWorld(GARDEN, 7);
     const c = w.colonies[0];
-    c.essence = 1;
-    expect(placeLure(w, c.id, { x: 0, y: 0 })).toBe(false);
-    c.essence = 5;
     expect(placeLure(w, c.id, { x: 100, y: 50 })).toBe(true);
-    expect(c.essence).toBe(3);
     expect(w.lure).not.toBeNull();
+    expect(placeLure(w, c.id, { x: 0, y: 0 })).toBe(false); // cooling
     run(w, 450); // 45s > 40s lifetime
     expect(w.lure).toBeNull();
   });

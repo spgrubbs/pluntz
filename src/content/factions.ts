@@ -30,6 +30,8 @@ export interface FactionDef {
   };
   /** In-fiction names for parts, used across the UI. */
   terms: { leaf: string; leafOne: string; cone: string; trunk: string };
+  /** Per-clade verb cooldown multipliers (<1 = faster). Unlisted verbs are 1. */
+  verbHaste?: Partial<Record<'ping' | 'lure' | 'bless' | 'prune', number>>;
   /** myco-style factions only: the underground network's economy. */
   myco?: {
     startLen: number; // initial mycelium arc length on sprouting
@@ -127,6 +129,7 @@ export const PINOPHYTA: FactionDef = {
   name: 'Pinophyta',
   render: { leaf: 'needle', heart: 'pinecone', repro: 'cone' },
   terms: { leaf: 'needles', leafOne: 'needle', cone: 'seed cone', trunk: 'trunk' },
+  verbHaste: { bless: 0.7 }, // patient wood answers the shepherd's surge readily
   palettes: [
     {
       stem: 0x5d8a5f,
@@ -244,6 +247,7 @@ export const ANTHOPHYTA: FactionDef = {
   name: 'Anthophyta',
   render: { leaf: 'broad', heart: 'bulb', repro: 'flower' },
   terms: { leaf: 'leaves', leafOne: 'leaf', cone: 'flower', trunk: 'runner' },
+  verbHaste: { lure: 0.6 }, // perfume-makers: scent verbs come easy
   palettes: [
     {
       stem: 0x5f9948,
@@ -362,6 +366,7 @@ export const BASIDIOMYCOTA: FactionDef = {
   name: 'Basidiomycota',
   render: { leaf: 'gill', heart: 'dome', repro: 'dome' },
   terms: { leaf: 'gills', leafOne: 'gill', cone: 'fruiting dome', trunk: 'mycelium' },
+  verbHaste: { prune: 0.5 }, // intimate with death: the knife returns quickly
   myco: {
     startLen: 34,
     spreadLen: 1.15, // wraps a mid-size rock in ~4 min, not 90s

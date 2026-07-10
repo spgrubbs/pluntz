@@ -11,7 +11,6 @@ import { chooseMutation } from '../sim/stats';
 export class TraitPanel {
   private el: HTMLElement;
   private listEl: HTMLElement;
-  private essenceEl: HTMLElement;
   private open = false;
   private lastKey = '';
 
@@ -24,27 +23,13 @@ export class TraitPanel {
     el.innerHTML = `
       <div class="tp-head">
         <span>EVOLUTION</span>
-        <b class="tp-essence"></b>
         <button class="tp-close">×</button>
-      </div>
-      <div class="tp-sliders">
-        <label>fortify <input type="range" class="tp-expand" min="0" max="100" /> expand</label>
-        <label>spread <input type="range" class="tp-vertical" min="0" max="100" /> tall</label>
       </div>
       <div class="tp-list"></div>`;
     document.getElementById('ui')!.appendChild(el);
     this.el = el;
     this.listEl = el.querySelector('.tp-list')!;
-    this.essenceEl = el.querySelector('.tp-essence')!;
     el.querySelector('.tp-close')!.addEventListener('click', () => this.hide());
-    (el.querySelector('.tp-expand') as HTMLInputElement).addEventListener('input', (e) => {
-      const c = this.colony();
-      if (c) c.instincts.expand = Number((e.target as HTMLInputElement).value) / 100;
-    });
-    (el.querySelector('.tp-vertical') as HTMLInputElement).addEventListener('input', (e) => {
-      const c = this.colony();
-      if (c) c.instincts.vertical = Number((e.target as HTMLInputElement).value) / 100;
-    });
   }
 
   private colony(): Colony | undefined {
@@ -58,15 +43,6 @@ export class TraitPanel {
   show(): void {
     this.open = true;
     this.el.classList.add('open');
-    const c = this.colony();
-    if (c) {
-      (this.el.querySelector('.tp-expand') as HTMLInputElement).value = String(
-        c.instincts.expand * 100,
-      );
-      (this.el.querySelector('.tp-vertical') as HTMLInputElement).value = String(
-        c.instincts.vertical * 100,
-      );
-    }
     this.lastKey = '';
     this.rebuild();
   }
@@ -158,12 +134,11 @@ export class TraitPanel {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }
 
-  /** Per-frame: essence readout; rebuild when the offer state changes. */
+  /** Per-frame: rebuild when the offer state changes. */
   update(): void {
     if (!this.open) return;
     const c = this.colony();
     if (!c) return;
-    this.essenceEl.textContent = `${c.essence}⬡`;
     const key = `${c.pendingOffer ? c.pendingOffer.join(',') : this.countdown()}:${c.mutations.length}`;
     if (key !== this.lastKey) {
       this.lastKey = key;

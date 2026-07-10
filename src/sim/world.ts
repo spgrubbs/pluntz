@@ -7,7 +7,7 @@ import { FACTIONS } from '../content/factions';
 import { createPlant, stepPlant, damagePart, killPart, fireCone } from './plant';
 import { canopyCross, isLit, CANOPY_BIN, type CanopyIndex, type CanopySeg } from './light';
 import { emit, setEventSink } from './events';
-import { colonyMods } from './stats';
+import { colonyMods, verbReady, useVerb } from './stats';
 import { substrateHalfAngle, canRootAt } from './plant';
 import { MUTATIONS, AI_MUTATION_PREF, MUTATION_TIMING } from '../content/mutations';
 
@@ -78,13 +78,11 @@ export function createWorld(map: MapDef, seed: number): World {
       faction: c.faction,
       isPlayer: c.player ?? false,
       palette: c.palette ?? 0,
-      essence: TUNING.essence.starting,
-      rockAwards: 0,
       mutations: [],
       pendingOffer: null,
       nextMutationAt: MUTATION_TIMING.firstAt,
       maxTier: 1,
-      instincts: { expand: 0.5, vertical: 0.5 },
+      verbReadyAt: { ping: 0, lure: 0, bless: 0, prune: 0 },
     });
   }
   for (const s of map.spawns) {
@@ -140,11 +138,11 @@ function spawnFauna(world: World, kind: import('./types').FaunaKind): void {
   });
 }
 
-/** The Lure verb: a 40s scent that pulls fauna. Costs essence. */
+/** The Lure verb: a 40s scent that pulls fauna. Runs on a cooldown. */
 export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
   const colony = world.colonies.find((c) => c.id === colonyId);
-  if (!colony || colony.essence < 2) return false;
-  colony.essence -= 2;
+  if (!colony || !verbReady(world, colony, 'lure')) return false;
+  useVerb(world, colony, 'lure');
   world.lure = { x: pos.x, y: pos.y, colonyId, expires: world.time + 40 };
   emit({ type: 'lure', x: pos.x, y: pos.y });
   return true;
@@ -661,26 +659,22 @@ export function sproutAt(
   // plant's substrate bed (the visible litter arc), nor closer than the
   // faction's hard minimum. Mature plants therefore guard more ground.
   if (!canRootAt(world, ast, angleRad, faction)) return false;
-  const hadRock = world.plants.some(
-    (pl) => pl.alive && pl.colonyId === colonyId && pl.asteroidId === ast.id,
-  );
   const plant = createPlant(world, ast, angleRad, faction, colonyId);
   const colony = world.colonies.find((c) => c.id === colonyId);
   plant.energy = R.seedStartEnergy + colonyMods(colony).seedlingEnergyAdd;
   world.plants.push(plant);
-  if (!hadRock && colony) {
-    // diminishing returns: sprawling factions can't farm essence via sheer spread
-    colony.essence += colony.rockAwards < 4 ? TUNING.essence.newRockBonus : 1;
-    colony.rockAwards++;
-  }
   emit({ type: 'sprout', x: anchor.x, y: anchor.y, faction });
   return true;
 }
 
-/** Place (or move) a colony's ping — the attention verb. */
-export function setPing(world: World, colonyId: number, pos: Vec2): void {
+/** Place (or move) a colony's ping — the attention verb. Runs on a cooldown. */
+export function setPing(world: World, colonyId: number, pos: Vec2): boolean {
+  const colony = world.colonies.find((c) => c.id === colonyId);
+  if (!colony || !verbReady(world, colony, 'ping')) return false;
+  useVerb(world, colony, 'ping');
   world.ping = { x: pos.x, y: pos.y, colonyId, expires: world.time + 60 };
   emit({ type: 'ping', x: pos.x, y: pos.y });
+  return true;
 }
 
 function stepSeeds(world: World, dt: number): void {
@@ -832,7 +826,7 @@ export function stepWorld(world: World, dt: number): void {
   stepDebris(world, dt);
   stepFauna(world, dt);
   if (world.tick % 5 === 0) applyContactDamage(world, dt * 5);
-  stepEssence(world);
+  stepDeaths(world);
   if (world.tick % 10 === 0) {
     stepCanopyControl(world, dt * 10);
     stepMutations(world);
@@ -840,21 +834,17 @@ export function stepWorld(world: World, dt: number): void {
   }
 }
 
-/** Essence economy: survival ticks, deaths paid out to rivals. */
-function stepEssence(world: World): void {
+/** Deaths ripple outward: Necrosis colonies re-knit their verbs on each kill. */
+function stepDeaths(world: World): void {
   if (world.roundState !== 'playing') return;
-  const E = TUNING.essence;
-  if (world.tick % Math.round(E.survivalInterval / TUNING.simDt) === 0 && world.tick > 0) {
-    for (const c of world.colonies) {
-      if (world.plants.some((p) => p.alive && p.colonyId === c.id)) c.essence += 1;
-    }
-  }
   for (const p of world.plants) {
     if (p.alive || p.deathScored) continue;
     p.deathScored = true;
     for (const c of world.colonies) {
-      // Necrosis doubles the payout — death is the fungus' harvest
-      if (c.id !== p.colonyId) c.essence += E.rivalDeathBonus * colonyMods(c).essenceOnDeathMult;
+      if (c.id === p.colonyId) continue;
+      if (colonyMods(c).necrosis) {
+        c.verbReadyAt = { ping: 0, lure: 0, bless: 0, prune: 0 }; // the feast restores
+      }
     }
   }
 }
@@ -1247,12 +1237,13 @@ export function hashWorld(world: World): number {
     }
   }
   for (const c of world.colonies) {
-    mix(c.essence);
     mix(c.mutations.length);
     mix(c.pendingOffer ? c.pendingOffer.length : -1);
     mix(Math.min(c.nextMutationAt, 1e6));
-    mix(c.instincts.expand * 100);
-    mix(c.instincts.vertical * 100);
+    mix(c.verbReadyAt.ping);
+    mix(c.verbReadyAt.lure);
+    mix(c.verbReadyAt.bless);
+    mix(c.verbReadyAt.prune);
   }
   mix(world.faunaRespawns.length);
   mix(world.debris.length);
