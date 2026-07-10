@@ -485,7 +485,9 @@ fungal spore reach.
 
 ---
 
-*Current state: M0–M9 shipped + M9.1 polish + §13.1 (fungal mycelium redesign) + §13.3
-(time-gated Mutations + metaprogression) + §13.4 (Scarabaeidae & Araneae) + §13.5 fog of
-war (per-map, debuting on C04). Next candidates: §13.2 (fungal identity split), remaining
+*Current state: M0–M9 + M9.1 + §13.1 mycelium + §13.3 mutations (reworked into three
+2-card drafts; wins add a third card to drafts 1..N) + §13.4 fauna (Scarabaeidae,
+Araneae with web-capture, Lampyridae lanterns, universal Lure) + §13.5 per-map fog
+(grey pall). Economy: essence removed — verbs run on per-clade cooldowns. Pace halved;
+speed is a player control. Next candidates: §13.2 (fungal identity split), remaining
 §13.5 atmosphere (off-screen events, sound), M10 Android wrap.*

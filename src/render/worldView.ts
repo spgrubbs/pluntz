@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import type { World } from '../sim/types';
-import { toSunVec } from '../sim/light';
+import { toSunVec, isLit } from '../sim/light';
 import { dot, scale, add } from '../sim/vec';
 
 const SHADOW_ALPHA = 0.42;
@@ -56,9 +56,24 @@ export class WorldView {
       // a scarab's shove makes the whole rock judder (render-only offset)
       const j = judder?.get(a.id);
       const apos = j ? { x: a.pos.x + j.x, y: a.pos.y + j.y } : a.pos;
+      // is this rock itself standing in another rock's shadow? Sample the
+      // sunward face so the drawn lighting agrees with what plants feel.
+      const perp = { x: -toSun.y, y: toSun.x };
+      let litFrac = 0;
+      for (const off of [-0.65, 0, 0.65]) {
+        const sample = {
+          x: a.pos.x + toSun.x * a.radius * 0.9 + perp.x * a.radius * off,
+          y: a.pos.y + toSun.y * a.radius * 0.9 + perp.y * a.radius * off,
+        };
+        if (isLit(sample, toSun, world.asteroids)) litFrac += 1 / 3;
+      }
       const world_pts: number[] = [];
       for (const p of a.shape) world_pts.push(apos.x + p.x, apos.y + p.y);
       g.poly(world_pts).fill({ color: a.rich ? ROCK_FILL_RICH : ROCK_FILL });
+      if (litFrac < 0.99) {
+        // eclipsed: the whole face falls dark, matching the shadow volume
+        g.poly(world_pts).fill({ color: ROCK_DARK, alpha: (1 - litFrac) * 0.5 });
+      }
 
       // faceted dark side: consecutive vertices facing away from the sun + center
       const n = a.shape.length;
@@ -91,7 +106,11 @@ export class WorldView {
         if (facing > 0.3) {
           g.moveTo(apos.x + p0.x, apos.y + p0.y)
             .lineTo(apos.x + p1.x, apos.y + p1.y)
-            .stroke({ width: 2.5, color: ROCK_RIM_LIT, alpha: 0.28 + facing * 0.45 });
+            .stroke({
+              width: 2.5,
+              color: ROCK_RIM_LIT,
+              alpha: (0.28 + facing * 0.45) * (0.15 + 0.85 * litFrac),
+            });
         }
       }
 

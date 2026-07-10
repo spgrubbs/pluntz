@@ -14,7 +14,7 @@ import type { World } from '../sim/types';
  * (dark rect + erase-blend "light" circles), then stretched over the world.
  * The low resolution is the point: upscaling gives soft, cheap fog edges.
  */
-const FOG_COLOR = 0x04060d;
+const FOG_COLOR = 0x2b3244; // a grey pall — clearly 'fog', not just dark space
 const SCALE = 0.22; // texture resolution relative to the world
 
 export class FogView {
@@ -24,12 +24,13 @@ export class FogView {
   private tex: RenderTexture | null = null;
   private scene = new Container();
   private veil = new Graphics();
+  private blotches = new Graphics();
   private lights = new Graphics();
   private sizedFor = '';
 
   constructor() {
     this.lights.blendMode = 'erase';
-    this.scene.addChild(this.veil, this.lights);
+    this.scene.addChild(this.veil, this.blotches, this.lights);
   }
 
   update(world: World, playerColonyId: number, renderer: Renderer): void {
@@ -52,7 +53,7 @@ export class FogView {
       this.sprite.scale.set(1 / SCALE);
       this.container.removeChildren();
       this.container.addChild(this.sprite);
-      this.veil.clear().rect(0, 0, tw, th).fill({ color: FOG_COLOR, alpha: 0.93 });
+      this.veil.clear().rect(0, 0, tw, th).fill({ color: FOG_COLOR, alpha: 0.9 });
     }
 
     // collect this frame's reveal circles (world coords)
@@ -75,6 +76,22 @@ export class FogView {
     }
     if (world.lure && world.lure.colonyId === playerColonyId) {
       holes.push({ x: world.lure.x, y: world.lure.y, r: 180 });
+    }
+
+    // drifting smoke blotches give the pall texture and slow motion
+    const b = this.blotches;
+    b.clear();
+    const tw = Math.ceil(world.width * SCALE);
+    const th = Math.ceil(world.height * SCALE);
+    for (let i = 0; i < 26; i++) {
+      const px = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+      const py = ((Math.sin(i * 78.233) * 12345.6789) % 1 + 1) % 1;
+      const drift = Math.sin(world.time * 0.05 + i * 1.7) * 14 * SCALE;
+      const r = (55 + (i % 5) * 28) * SCALE;
+      b.circle(px * tw + drift, py * th + Math.cos(world.time * 0.04 + i) * 10 * SCALE, r).fill({
+        color: i % 2 ? 0x39415a : 0x1c2333,
+        alpha: 0.10,
+      });
     }
 
     const g = this.lights;

@@ -142,6 +142,87 @@ function weave(i: number, salt: number): number {
 }
 
 /**
+ * The terraformed substrate bed, drawn in the clade's own idiom: Pinophyta
+ * sheds a mat of fallen needles; Anthophyta carpets its claim in a low
+ * flowering meadow. (Basidiomycota's bed is the mycelium — see below.)
+ * All texture is deterministic (weave), so cached rebuilds don't shimmer.
+ */
+function drawBed(
+  g: Graphics,
+  plant: Plant,
+  c: FactionColors,
+  ast: Asteroid,
+  f: (typeof FACTIONS)[keyof typeof FACTIONS],
+): void {
+  const half = substrateHalfAngle(plant);
+  const a0 = plant.anchorAngle - half;
+  const span = half * 2;
+  const surf = (a: number): number => surfaceRadiusAt(ast, a);
+
+  // soft under-band: the stained ground both idioms sit on
+  const steps = Math.max(6, Math.ceil(span / 0.1));
+  let started = false;
+  for (let k = 0; k <= steps; k++) {
+    const a = a0 + (span * k) / steps;
+    const r = surf(a) + 1.5;
+    if (!started) {
+      g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      started = true;
+    } else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.stroke({ width: 3.5, color: c.litter, alpha: 0.55 });
+
+  const salt = plant.id * 13;
+  if (f.growth.style === 'spire') {
+    // needle mat: short strokes lying every which way, like a forest floor
+    const n = Math.max(8, Math.floor(span / 0.04));
+    for (let k = 0; k < n; k++) {
+      const a = a0 + span * ((k + weave(k, salt) * 0.8) / n);
+      const r = surf(a) + 1 + weave(k, salt + 1) * 3.5;
+      const px = Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      // needles lie roughly along the surface, scattered a little
+      const lie = a + Math.PI / 2 + (weave(k, salt + 2) - 0.5) * 1.1;
+      const ln = 3.5 + weave(k, salt + 3) * 3.5;
+      const tone = weave(k, salt + 4);
+      g.moveTo(px, py)
+        .lineTo(px + Math.cos(lie) * ln, py + Math.sin(lie) * ln)
+        .stroke({
+          width: 1.1,
+          color: tone < 0.5 ? c.litter : lerpColor(c.litter, c.stemOld, 0.7),
+          alpha: 0.55 + tone * 0.35,
+        });
+    }
+  } else {
+    // flowering meadow: low clover dots with the odd tiny bloom
+    const n = Math.max(6, Math.floor(span / 0.055));
+    for (let k = 0; k < n; k++) {
+      const a = a0 + span * ((k + weave(k, salt) * 0.8) / n);
+      const r = surf(a) + 2 + weave(k, salt + 1) * 3;
+      const px = Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      const t = weave(k, salt + 2);
+      if (t > 0.82) {
+        // a tiny bloom: three petals around a bright eye
+        for (let q = 0; q < 3; q++) {
+          const pa = t * 20 + (q / 3) * Math.PI * 2;
+          g.circle(px + Math.cos(pa) * 1.7, py + Math.sin(pa) * 1.7, 1.3).fill({
+            color: c.cone,
+            alpha: 0.75,
+          });
+        }
+        g.circle(px, py, 0.9).fill({ color: c.heartCore, alpha: 0.9 });
+      } else {
+        g.circle(px, py, 1 + t * 1.4).fill({
+          color: t < 0.4 ? c.litter : lerpColor(c.litter, c.leafCanopy, 0.55),
+          alpha: 0.6 + t * 0.3,
+        });
+      }
+    }
+  }
+}
+
+/**
  * The Basidiomycota's claim isn't a litter bed — it's the rock itself,
  * stained and threaded from within. Draw a dark saturation band hugging the
  * surface plus laced cords woven just underground; both end in questing
@@ -221,21 +302,7 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
   if (plant.alive && plant.myco) {
     drawMycelium(g, plant, c, ast);
   } else if (plant.alive) {
-    const half = substrateHalfAngle(plant);
-    const steps = Math.max(6, Math.ceil((half * 2) / 0.1));
-    const a0 = plant.anchorAngle - half;
-    let started = false;
-    for (let k = 0; k <= steps; k++) {
-      const a = a0 + ((half * 2) * k) / steps;
-      const r = surfaceRadiusAt(ast, a) + 2;
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r;
-      if (!started) {
-        g.moveTo(x, y);
-        started = true;
-      } else g.lineTo(x, y);
-    }
-    g.stroke({ width: 4.5, color: c.litter, alpha: 0.9 });
+    drawBed(g, plant, c, ast, f);
   }
 
   for (const p of plant.parts) {
@@ -276,13 +343,16 @@ function drawPlant(g: Graphics, plant: Plant, c: FactionColors, ast: Asteroid): 
         break;
       }
       case 'leaf': {
-        let color = starving
-          ? c.leafStarving
-          : p.shade === 0
-            ? c.leaf
-            : p.shade === 1
-              ? c.leafCanopy
-              : c.leafShaded;
+        // amber = starving; shade keeps its own dark tones so the CAUSE
+        // (shadow) never wears the same color as the SYMPTOM (starvation)
+        let color =
+          starving && p.shade === 0
+            ? c.leafStarving
+            : p.shade === 0
+              ? c.leaf
+              : p.shade === 1
+                ? c.leafCanopy
+                : c.leafShaded;
         if (p.infectedBy >= 0) color = lerpColor(color, INFECT, 0.7);
         const alpha = p.shade === 0 ? 0.95 : p.shade === 1 ? 0.7 : 0.5;
         if (f.render.leaf === 'gill') {
