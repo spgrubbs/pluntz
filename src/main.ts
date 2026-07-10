@@ -25,7 +25,7 @@ import { Inspector } from './ui/inspector';
 import { TraitPanel } from './ui/traitPanel';
 import { Menu, type GameConfig } from './ui/menu';
 import { bless, verbReady, useVerb, type VerbId } from './sim/stats';
-import { maxTierFor, recordWin } from './ui/profile';
+import { bonusDepthFor, recordWin } from './ui/profile';
 
 async function boot(): Promise<void> {
   const app = new Application();
@@ -67,12 +67,12 @@ async function boot(): Promise<void> {
   setEventSink(world.events);
   let playerColonyId = world.colonies.find((c) => c.isPlayer)?.id ?? -1;
 
-  /** Metaprogression: every colony's mutation depth mirrors the player's
-   * unlocked tier for their clade (the opposition scales with you). */
+  /** Metaprogression: every colony's draft width mirrors the player's
+   * unlocked depth for their clade (the opposition scales with you). */
   function applyMetaTiers(w: World): void {
     const player = w.colonies.find((c) => c.isPlayer);
-    const tier = player ? maxTierFor(player.faction) : 1;
-    for (const c of w.colonies) c.maxTier = tier;
+    const depth = player ? bonusDepthFor(player.faction) : 0;
+    for (const c of w.colonies) c.bonusDepth = depth;
   }
 
   // --- Scene graph -------------------------------------------------------------

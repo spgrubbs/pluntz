@@ -120,6 +120,10 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
   for (const p of plant.parts) {
     if (p.dead) continue;
     p.age += dt;
+    // Undying Knot: the heart slowly knits itself back together
+    if (p.kind === 'heart' && mods.heartRegen > 0 && p.hp < p.maxHp) {
+      p.hp = Math.min(p.hp + mods.heartRegen * dt, p.maxHp);
+    }
     if (p.kind === 'stem' && !p.hardened && p.age > f.life.hardenAge * mods.hardenAgeMult) {
       p.hardened = true;
       p.hp += f.life.hardenBonus + mods.hardenBonusAdd;

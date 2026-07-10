@@ -81,7 +81,7 @@ export function createWorld(map: MapDef, seed: number): World {
       mutations: [],
       pendingOffer: null,
       nextMutationAt: MUTATION_TIMING.firstAt,
-      maxTier: 1,
+      bonusDepth: 0,
       verbReadyAt: { ping: 0, lure: 0, bless: 0, prune: 0 },
     });
   }
@@ -143,7 +143,8 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
   const colony = world.colonies.find((c) => c.id === colonyId);
   if (!colony || !verbReady(world, colony, 'lure')) return false;
   useVerb(world, colony, 'lure');
-  world.lure = { x: pos.x, y: pos.y, colonyId, expires: world.time + 40 };
+  const life = 40 * colonyMods(colony).lureDurationMult;
+  world.lure = { x: pos.x, y: pos.y, colonyId, expires: world.time + life };
   emit({ type: 'lure', x: pos.x, y: pos.y });
   return true;
 }
@@ -770,6 +771,21 @@ function stepSeeds(world: World, dt: number): void {
           y: at.y,
           faction: s.faction,
         });
+        // Volatile Seeds: the landing sears nearby rival growth either way
+        if (modsBy.get(s.colonyId)?.volatileSeeds) {
+          emit({ type: 'shatter', x: at.x, y: at.y, power: 10 });
+          for (const plant of world.plants) {
+            if (!plant.alive || plant.colonyId === s.colonyId) continue;
+            if (dist(at, plant.astPos) > 320) continue;
+            for (const p of plant.parts) {
+              if (p.dead) continue;
+              const pa = add(plant.astPos, p.base);
+              const pb = add(plant.astPos, p.tip);
+              if (distToSegment(at, pa, pb) < 34) damagePart(plant, p.id, 20);
+              if (!plant.alive) break;
+            }
+          }
+        }
         world.seeds.splice(i, 1);
         break;
       }
@@ -850,30 +866,28 @@ function stepDeaths(world: World): void {
 }
 
 /**
- * The mutation clock: every colony is periodically dealt a two-card offer
- * from the shallowest tier it hasn't finished (gated by maxTier). AI picks
- * immediately down its faction's preference list; the player's offer waits
- * in pendingOffer, and their next deal is timed from the moment they choose.
+ * The mutation clock: three draft opportunities per round. Draft k deals
+ * every card of tier k — two baseline, plus the win-unlocked bonus card when
+ * the colony's bonusDepth reaches k. AI picks immediately down its faction's
+ * preference list; the player's draft waits in pendingOffer, and their next
+ * deal is timed from the moment they choose.
  */
 function stepMutations(world: World): void {
   if (world.roundState !== 'playing') return;
   for (const c of world.colonies) {
     if (c.pendingOffer || world.time < c.nextMutationAt) continue;
-    const pool = (MUTATIONS[c.faction] ?? []).filter(
-      (m) => m.tier <= c.maxTier && !c.mutations.includes(m.id),
-    );
-    if (pool.length === 0) {
-      c.nextMutationAt = MUTATION_TIMING.never; // evolved out — nothing left
+    const draft = c.mutations.length + 1; // one keep per opportunity
+    if (draft > 3) {
+      c.nextMutationAt = MUTATION_TIMING.never; // fully evolved this round
       continue;
     }
-    pool.sort((a, b) => a.tier - b.tier);
-    // first card from the shallowest tier on offer; the second from the next
-    // few, so a deep option can tempt you away from finishing a tier
-    const shallow = pool.filter((m) => m.tier === pool[0].tier);
-    const first = shallow[world.rng.int(shallow.length)];
-    const rest = pool.filter((m) => m.id !== first.id);
-    const offer = [first.id];
-    if (rest.length > 0) offer.push(rest[world.rng.int(Math.min(rest.length, 3))].id);
+    const offer = (MUTATIONS[c.faction] ?? [])
+      .filter((m) => m.tier === draft && (!m.bonus || c.bonusDepth >= draft))
+      .map((m) => m.id);
+    if (offer.length === 0) {
+      c.nextMutationAt = MUTATION_TIMING.never;
+      continue;
+    }
     if (!c.isPlayer) {
       const pref = AI_MUTATION_PREF[c.faction] ?? [];
       const rank = (id: string): number => {

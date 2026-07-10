@@ -53,37 +53,38 @@ describe('time-gated mutations (13.3)', () => {
     expect(player.nextMutationAt).toBeCloseTo(w.time + MUTATION_TIMING.interval, 1);
   });
 
-  it('tier gating: maxTier 1 only ever offers tier-1 cards, then runs dry', () => {
+  it('drafts run 1..3 in order, two base cards each, then the colony is done', () => {
     const w = createWorld(CONTACT01, 7);
     w.debrisPerMin = 0;
     const player = w.colonies.find((c) => c.isPlayer)!;
-    const tier1 = MUTATIONS[player.faction].filter((m) => m.tier === 1).map((m) => m.id);
-    for (let round = 0; round < 2; round++) {
+    for (let draft = 1; draft <= 3; draft++) {
       while (!player.pendingOffer && w.time < 1e5) run(w, 50);
-      for (const id of player.pendingOffer!) expect(tier1).toContain(id);
+      const expected = MUTATIONS[player.faction]
+        .filter((m) => m.tier === draft && !m.bonus)
+        .map((m) => m.id);
+      expect(player.pendingOffer!.slice().sort()).toEqual(expected.slice().sort());
       chooseMutation(w, player.id, player.pendingOffer![0]);
     }
-    // both tier-1 mutations owned; the pool is dry at this depth
+    // all three keeps made; no fourth draft ever arrives
     run(w, Math.ceil((MUTATION_TIMING.interval + 5) / TUNING.simDt));
     expect(player.pendingOffer).toBeNull();
-    expect(player.mutations).toHaveLength(2);
+    expect(player.mutations).toHaveLength(3);
   });
 
-  it('deeper tiers unlock when maxTier rises', () => {
+  it('wins widen drafts: bonusDepth adds the third card to drafts 1..depth', () => {
     const w = createWorld(CONTACT01, 7);
     w.debrisPerMin = 0;
     const player = w.colonies.find((c) => c.isPlayer)!;
-    player.maxTier = 3;
-    const owned = new Set<string>();
-    for (let round = 0; round < 4; round++) {
-      while (!player.pendingOffer && w.time < 1e5) run(w, 50);
-      chooseMutation(w, player.id, player.pendingOffer![0]);
-    }
-    for (const id of player.mutations) owned.add(id);
-    const tiers = MUTATIONS[player.faction]
-      .filter((m) => owned.has(m.id))
-      .map((m) => m.tier);
-    expect(Math.max(...tiers)).toBeGreaterThan(1); // dug past tier 1
+    player.bonusDepth = 1; // one win with this clade
+    // draft 1 deals three cards, including the win-unlocked bonus
+    while (!player.pendingOffer && w.time < 1e5) run(w, 50);
+    expect(player.pendingOffer).toHaveLength(3);
+    const bonus1 = MUTATIONS[player.faction].find((m) => m.tier === 1 && m.bonus)!;
+    expect(player.pendingOffer).toContain(bonus1.id);
+    chooseMutation(w, player.id, player.pendingOffer![0]);
+    // draft 2 is still a plain two-card deal at depth 1
+    while (!player.pendingOffer && w.time < 1e5) run(w, 50);
+    expect(player.pendingOffer).toHaveLength(2);
   });
 
   it('succulence: pruning a living vine sows seeds instead of just wounds', () => {

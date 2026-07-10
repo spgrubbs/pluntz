@@ -36,6 +36,10 @@ export interface Mods {
   huskRateMult: number; // husk digestion speed
   puppetBloom: boolean; // infection kills burst into this colony's spores
   necrosis: boolean; // rival deaths re-knit this colony's verbs (cooldown reset)
+  volatileSeeds: boolean; // seeds detonate on landing, searing rival growth
+  lureCdMult: number; // Perfume: lure cooldown multiplier
+  lureDurationMult: number; // Perfume: lure scent lifetime multiplier
+  heartRegen: number; // hp/s the heart knits back (Undying Knot)
 }
 
 export const DEFAULT_MODS: Mods = {
@@ -68,6 +72,10 @@ export const DEFAULT_MODS: Mods = {
   huskRateMult: 1,
   puppetBloom: false,
   necrosis: false,
+  volatileSeeds: false,
+  lureCdMult: 1,
+  lureDurationMult: 1,
+  heartRegen: 0,
 };
 
 export function colonyMods(colony: Colony | undefined): Mods {
@@ -87,6 +95,9 @@ export function colonyMods(colony: Colony | undefined): Mods {
     m.seedRange *= 1.45;
   }
   if (has('twinpayload')) m.twinPayload = true;
+  if (has('volatile')) m.volatileSeeds = true;
+  if (has('greatboughs')) m.branchStepsAdd += 2;
+  if (has('longshot')) m.seedRange *= 1.6;
   if (has('evergreen')) {
     m.shadeFloorOverride = 0.3;
     m.canopyShadeOverride = 0.7;
@@ -100,6 +111,12 @@ export function colonyMods(colony: Colony | undefined): Mods {
     m.strangler = true;
     m.contactDealt *= 2.5;
   }
+  if (has('perfume')) {
+    m.lureCdMult *= 0.5;
+    m.lureDurationMult *= 2;
+  }
+  if (has('tuberreserve')) m.seedlingEnergyAdd += 18;
+  if (has('sunleaf')) m.leafIncome *= 1.25;
   // basidiomycota
   if (has('deepcords')) m.mycoRateMult *= 1.6;
   if (has('nightbloom')) m.nightbloom = true;
@@ -110,14 +127,23 @@ export function colonyMods(colony: Colony | undefined): Mods {
     m.necrosis = true;
   }
   if (has('puppetbloom')) m.puppetBloom = true;
+  if (has('chitincords')) {
+    m.hardenAgeMult *= 0.5;
+    m.hardenBonusAdd += 8;
+    m.contactTaken *= 0.6;
+  }
+  if (has('farspore')) m.seedRange *= 1.5;
+  if (has('undyingknot')) m.heartRegen = 0.6;
   return m;
 }
 
 export type VerbId = 'ping' | 'lure' | 'bless' | 'prune';
 
-/** A verb's full cooldown for this colony (base × clade haste). */
+/** A verb's full cooldown for this colony (base × clade haste × mutations). */
 export function verbCooldown(colony: Colony, verb: VerbId): number {
-  return TUNING.verbs.cooldown[verb] * (FACTIONS[colony.faction].verbHaste?.[verb] ?? 1);
+  let cd = TUNING.verbs.cooldown[verb] * (FACTIONS[colony.faction].verbHaste?.[verb] ?? 1);
+  if (verb === 'lure') cd *= colonyMods(colony).lureCdMult;
+  return cd;
 }
 
 export function verbReady(world: World, colony: Colony, verb: VerbId): boolean {

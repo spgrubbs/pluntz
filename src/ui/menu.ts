@@ -1,6 +1,6 @@
 import type { FactionId } from '../sim/types';
 import { MAPS, MAP_CHOICES } from '../content/maps/index';
-import { winsFor, maxTierFor } from './profile';
+import { winsFor, bonusDepthFor } from './profile';
 
 export interface GameConfig {
   mapId: string;
@@ -107,7 +107,9 @@ export class Menu {
       if (winsEl) {
         const f = b.dataset.id as FactionId;
         const w = winsFor(f);
-        winsEl.textContent = w > 0 ? `★${w} · mutations tier ${maxTierFor(f)}` : 'mutations tier 1';
+        const depth = bonusDepthFor(f);
+        winsEl.textContent =
+          w > 0 ? `★${w} · third card in draft${depth > 1 ? 's' : ''} 1–${depth}` : '2-card drafts';
       }
     });
     el.querySelectorAll<HTMLElement>('.af button').forEach((b) =>
@@ -120,7 +122,7 @@ export class Menu {
     // resume only when a garden is stored
     let hasSave = false;
     try {
-      hasSave = !!localStorage.getItem('pluntz.save.v2');
+      hasSave = !!localStorage.getItem('pluntz.save.v3');
     } catch {
       hasSave = false;
     }

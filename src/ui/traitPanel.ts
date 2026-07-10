@@ -1,12 +1,12 @@
 import type { Colony, World } from '../sim/types';
-import { MUTATIONS, MUTATION_TIMING, mutationDef } from '../content/mutations';
+import { MUTATION_TIMING, mutationDef } from '../content/mutations';
 import { chooseMutation } from '../sim/stats';
 
 /**
- * The evolution panel. Its heart is the mutation offer: when the clock
- * deals the player two cards, they appear here (the panel auto-opens from
- * main.ts) and the player picks one. Below that: owned mutations and the
- * two instinct sliders. Essence is now purely verb fuel (Bless/Lure).
+ * The evolution panel. Its heart is the mutation draft: when the clock
+ * deals the player a draft (2 cards, 3 where wins have widened it), the
+ * cards appear here (the panel auto-opens from main.ts) and the player
+ * keeps one. Below that: owned mutations. Opened by tapping the round chip.
  */
 export class TraitPanel {
   private el: HTMLElement;
@@ -65,7 +65,7 @@ export class TraitPanel {
     if (c.pendingOffer) {
       const head = document.createElement('div');
       head.className = 'tp-offer-head';
-      head.textContent = '🧬 MUTATION — choose one';
+      head.textContent = `🧬 DRAFT ${c.mutations.length + 1} of 3 — keep one`;
       this.listEl.appendChild(head);
       for (const id of c.pendingOffer) {
         const m = mutationDef(c.faction, id);
@@ -75,7 +75,7 @@ export class TraitPanel {
         card.innerHTML = `
           <div class="tp-trait-top">
             <b>${m.name}</b>
-            <span>tier ${m.tier}</span>
+            <span>${m.bonus ? '★ won card' : `draft ${m.tier}`}</span>
           </div>
           <p>${m.desc}</p>`;
         card.addEventListener('click', () => {
@@ -86,15 +86,10 @@ export class TraitPanel {
     } else {
       const wait = document.createElement('div');
       wait.className = 'tp-offer-head tp-wait';
-      const pool = (MUTATIONS[c.faction] ?? []).filter(
-        (m) => m.tier <= c.maxTier && !c.mutations.includes(m.id),
-      );
       wait.textContent =
-        pool.length === 0
-          ? c.maxTier < 3
-            ? '🧬 fully evolved at this depth — win rounds to unlock deeper tiers'
-            : '🧬 fully evolved'
-          : `🧬 next mutation offer in ${this.countdown()}`;
+        c.mutations.length >= 3
+          ? '🧬 fully evolved this round'
+          : `🧬 draft ${c.mutations.length + 1} of 3 arrives in ${this.countdown()}`;
       this.listEl.appendChild(wait);
     }
 
@@ -111,16 +106,16 @@ export class TraitPanel {
         row.innerHTML = `
           <div class="tp-trait-top">
             <b>${m.name}</b>
-            <span>✓ t${m.tier}</span>
+            <span>✓ d${m.tier}</span>
           </div>
           <p>${m.desc}</p>`;
         this.listEl.appendChild(row);
       }
     }
-    if (c.maxTier < 3) {
+    if (c.bonusDepth < 3) {
       const note = document.createElement('p');
       note.className = 'tp-tier-note';
-      note.textContent = `tier ${c.maxTier + 1} locked — win ${c.maxTier} round${c.maxTier === 1 ? '' : 's'} with this clade to unlock`;
+      note.textContent = `win with this clade to add a third card to draft ${c.bonusDepth + 1}`;
       this.listEl.appendChild(note);
     }
   }

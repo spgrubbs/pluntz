@@ -133,8 +133,10 @@ export interface Colony {
   palette: number; // index into the faction's palette list
   mutations: string[]; // owned mutation ids (see content/mutations.ts)
   pendingOffer: string[] | null; // mutation ids awaiting the player's pick
-  nextMutationAt: number; // sim time the next offer arrives
-  maxTier: 1 | 2 | 3; // metaprogression gate: deepest mutation tier available
+  nextMutationAt: number; // sim time the next draft arrives
+  /** Metaprogression: drafts 1..bonusDepth deal a third card (wins with the
+   * clade set this; AI mirrors the player so the opposition scales too). */
+  bonusDepth: number;
   /** Verbs run on cooldowns (no currency): sim time each one is ready again.
    * Base durations in TUNING.verbs, flavored per clade by FactionDef.verbHaste. */
   verbReadyAt: { ping: number; lure: number; bless: number; prune: number };

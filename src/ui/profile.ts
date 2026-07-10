@@ -2,10 +2,11 @@ import type { FactionId } from '../sim/types';
 
 /**
  * The metaprogression profile: wins per clade, kept in localStorage across
- * rounds. Winning with a clade unlocks its deeper mutation tiers — tier 2
- * after the first win, tier 3 after the second. The sim never reads storage;
- * main.ts stamps the unlocked tier onto colonies at world creation (AI
- * colonies mirror the player, so the opposition scales with you).
+ * rounds. Each win widens one more draft: after the first win the round's
+ * first mutation draft deals a third card, after two wins the second draft
+ * does, after three the third. The sim never reads storage; main.ts stamps
+ * the unlocked depth onto colonies at world creation (AI colonies mirror
+ * the player, so the opposition scales with you).
  */
 const KEY = 'pluntz.profile';
 
@@ -40,7 +41,7 @@ export function winsFor(faction: FactionId): number {
   return loadProfile().wins[faction] ?? 0;
 }
 
-export function maxTierFor(faction: FactionId): 1 | 2 | 3 {
-  const w = winsFor(faction);
-  return w >= 2 ? 3 : w >= 1 ? 2 : 1;
+/** Drafts 1..bonusDepth deal a third card: one more per win, up to all three. */
+export function bonusDepthFor(faction: FactionId): number {
+  return Math.min(winsFor(faction), 3);
 }
