@@ -16,6 +16,7 @@ import { DebrisView } from './render/debrisView';
 import { PruneView } from './render/pruneView';
 import { FxView } from './render/fxView';
 import { FogView } from './render/fogView';
+import { Lerper } from './render/lerp';
 import { FaunaView } from './render/faunaView';
 import { SeedView } from './render/seedView';
 import { PingView } from './render/pingView';
@@ -87,13 +88,14 @@ async function boot(): Promise<void> {
   const seedView = new SeedView();
   const pingView = new PingView();
   const fogView = new FogView();
+  const lerper = new Lerper();
   const aimG = new Graphics();
   worldRoot.addChild(
     worldView.container,
     plantView.container,
     debrisView.g,
     seedView.g,
-    faunaView.g,
+    faunaView.container,
     fxView.g,
     fogView.container, // the veil sits over the world, under the player's own marks
     pingView.g,
@@ -379,6 +381,7 @@ async function boot(): Promise<void> {
     app.stage.removeChild(starfield.container);
     starfield = new Starfield(world.width, world.height, seed);
     app.stage.addChildAt(starfield.container, 0);
+    lerper.reset();
     centerOnHome();
   }
 
@@ -422,6 +425,7 @@ async function boot(): Promise<void> {
       app.stage.addChildAt(starfield.container, 0);
       lastSaveAt = world.time;
       speed = PLAY_SPEED;
+      lerper.reset();
       centerOnHome();
       return true;
     } catch {
@@ -542,8 +546,10 @@ async function boot(): Promise<void> {
     const t0 = performance.now();
     while (acc >= TUNING.simDt) {
       stepWorld(world, TUNING.simDt);
+      lerper.snapshot(world);
       acc -= TUNING.simDt;
     }
+    lerper.alpha = acc / TUNING.simDt;
     tickMsEma += (performance.now() - t0 - tickMsEma) * 0.1;
 
     // camera -> stage transform
@@ -564,11 +570,11 @@ async function boot(): Promise<void> {
         y: Math.cos(world.time * 37 + ast.id * 2) * 1.2,
       });
     }
-    worldView.update(world, judder);
-    plantView.update(world, judder);
-    debrisView.update(world);
-    seedView.update(world);
-    faunaView.update(world);
+    worldView.update(world, judder, lerper);
+    plantView.update(world, judder, lerper);
+    debrisView.update(world, lerper);
+    seedView.update(world, lerper);
+    faunaView.update(world, lerper);
     pingView.update(world);
     pruneView.update(prunePath);
 

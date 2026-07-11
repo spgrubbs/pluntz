@@ -341,7 +341,17 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       // cones answer the shepherd almost immediately.
       let delay = colony && !colony.isPlayer ? R.aiAutoFire : R.armedAutoFire;
       if (world.ping && world.ping.colonyId === plant.colonyId) delay = Math.min(delay, 1.5);
-      if (world.time - p.armedAt > delay) fireCone(world, plant, p.id, null);
+      if (world.time - p.armedAt > delay) {
+        const fired = fireCone(world, plant, p.id, null);
+        // marooned: nothing worth aiming at in range. After stewing on it,
+        // cast into the void anyway — drifting debris and scarab ferries
+        // turn blind faith into colonization (and cones stop sitting armed
+        // forever, which read as 'permanently fruiting').
+        if (!fired && world.time - p.armedAt > delay * 4) {
+          const out = rot(p.dir, plant.rng.range(-0.9, 0.9));
+          fireCone(world, plant, p.id, out);
+        }
+      }
     }
   }
 

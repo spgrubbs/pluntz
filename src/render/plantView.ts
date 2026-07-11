@@ -35,13 +35,19 @@ function lerpColor(a: number, b: number, t: number): number {
 export class PlantView {
   readonly container = new Container();
   readonly overlay = new Graphics();
+  readonly glow = new Graphics(); // additive: everything alive shines a little
   private entries = new Map<number, Entry>();
 
   constructor() {
-    this.container.addChild(this.overlay);
+    this.glow.blendMode = 'add';
+    this.container.addChild(this.glow, this.overlay);
   }
 
-  update(world: World, judder?: Map<number, { x: number; y: number }>): void {
+  update(
+    world: World,
+    judder?: Map<number, { x: number; y: number }>,
+    lerper?: import('./lerp').Lerper,
+  ): void {
     const alive = new Set<number>();
     for (const plant of world.plants) {
       alive.add(plant.id);
@@ -55,7 +61,8 @@ export class PlantView {
         this.entries.set(plant.id, e);
       }
       const j = judder?.get(ast.id);
-      e.g.position.set(ast.pos.x + (j?.x ?? 0), ast.pos.y + (j?.y ?? 0));
+      const base = lerper ? lerper.pos(ast.id, ast.pos) : ast.pos;
+      e.g.position.set(base.x + (j?.x ?? 0), base.y + (j?.y ?? 0));
 
       const starveBand = Math.floor((plant.energy / Math.max(plant.capacity, 1)) * 10);
       const chargeSig = plant.parts
@@ -75,34 +82,55 @@ export class PlantView {
         this.entries.delete(id);
       }
     }
-    this.drawOverlay(world);
+    this.drawOverlay(world, lerper);
   }
 
-  /** Pulsing rings on armed cones (any colony — a visible threat/promise). */
-  private drawOverlay(world: World): void {
+  /** Per-frame life-light: heart halos, armed-cone pulses, bless auras. */
+  private drawOverlay(world: World, lerper?: import('./lerp').Lerper): void {
     const g = this.overlay;
+    const gl = this.glow;
     g.clear();
+    gl.clear();
     const pulse = 0.5 + 0.5 * Math.sin(world.time * 5);
     for (const plant of world.plants) {
       if (!plant.alive) continue;
       const pal = paletteFor(world, plant);
+      const base = lerper ? lerper.pos(plant.asteroidId, plant.astPos) : plant.astPos;
+      const heartAt = plant.parts[0].base;
+      const hx = base.x + heartAt.x;
+      const hy = base.y + heartAt.y;
+      // the heart's living glow, breathing with stored energy
+      const vital = Math.max(0.15, Math.min(1, plant.energy / plant.capacity));
+      const breathe = 0.85 + 0.15 * Math.sin(world.time * 1.8 + plant.id);
+      gl.circle(hx, hy, (14 + vital * 10) * breathe).fill({
+        color: pal.heartCore,
+        alpha: 0.05 + vital * 0.08,
+      });
+      gl.circle(hx, hy, 6 * breathe).fill({ color: pal.heartCore, alpha: 0.08 + vital * 0.1 });
       if (world.time < plant.blessedUntil) {
-        const hb = plant.parts[0].base;
-        g.circle(plant.astPos.x + hb.x, plant.astPos.y + hb.y, 16 + pulse * 6).stroke({
+        g.circle(hx, hy, 16 + pulse * 6).stroke({
           width: 2,
           color: pal.heartCore,
           alpha: 0.3 + pulse * 0.4,
         });
+        gl.circle(hx, hy, 26 + pulse * 8).fill({ color: pal.heartCore, alpha: 0.08 });
       }
       for (const p of plant.parts) {
-        if (p.dead || p.kind !== 'cone' || p.armedAt < 0) continue;
-        const x = plant.astPos.x + p.tip.x;
-        const y = plant.astPos.y + p.tip.y;
-        g.circle(x, y, 8 + pulse * 4).stroke({
-          width: 1.8,
-          color: pal.coneArmed,
-          alpha: 0.35 + pulse * 0.45,
-        });
+        if (p.dead || p.kind !== 'cone') continue;
+        const x = base.x + p.tip.x;
+        const y = base.y + p.tip.y;
+        if (p.armedAt >= 0) {
+          g.circle(x, y, 8 + pulse * 4).stroke({
+            width: 1.8,
+            color: pal.coneArmed,
+            alpha: 0.35 + pulse * 0.45,
+          });
+          gl.circle(x, y, 10 + pulse * 5).fill({ color: pal.coneArmed, alpha: 0.14 });
+        } else if (p.charge > 1) {
+          // charging cones smolder brighter as they ripen
+          const frac = Math.min(p.charge / 40, 1);
+          gl.circle(x, y, 5 + frac * 5).fill({ color: pal.coneArmed, alpha: 0.04 + frac * 0.08 });
+        }
       }
     }
   }

@@ -26,7 +26,11 @@ export class WorldView {
     this.rays.blendMode = 'add';
   }
 
-  update(world: World, judder?: Map<number, { x: number; y: number }>): void {
+  update(
+    world: World,
+    judder?: Map<number, { x: number; y: number }>,
+    lerper?: import('./lerp').Lerper,
+  ): void {
     const toSun = toSunVec(world.sun);
     const diag = Math.hypot(world.width, world.height);
     const shadowLen = diag * 1.5;
@@ -53,9 +57,11 @@ export class WorldView {
     const g = this.rocks;
     g.clear();
     for (const a of world.asteroids) {
-      // a scarab's shove makes the whole rock judder (render-only offset)
+      // a scarab's shove makes the whole rock judder (render-only offset);
+      // lerp smooths the shove itself between sim ticks
       const j = judder?.get(a.id);
-      const apos = j ? { x: a.pos.x + j.x, y: a.pos.y + j.y } : a.pos;
+      const base = lerper ? lerper.pos(a.id, a.pos) : a.pos;
+      const apos = j ? { x: base.x + j.x, y: base.y + j.y } : base;
       // is this rock itself standing in another rock's shadow? Sample the
       // sunward face so the drawn lighting agrees with what plants feel.
       const perp = { x: -toSun.y, y: toSun.x };

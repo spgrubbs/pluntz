@@ -436,7 +436,7 @@ export const BASIDIOMYCOTA: FactionDef = {
   },
   repro: {
     style: 'ballistic',
-    sporeFan: 3,
+    sporeFan: 2, // spores land now; three per burst was a flood
     infects: true,
     coneMax: 2, // spores WORK now — three domes at once was a firehose
     coneCost: 6,
@@ -445,9 +445,9 @@ export const BASIDIOMYCOTA: FactionDef = {
     armedAutoFire: 7,
     aiAutoFire: 3,
     seedSpeed: 60,
-    seedRange: 560,
+    seedRange: 540,
     seedStartEnergy: 30,
-    minSpacing: 45,
+    minSpacing: 55, // webs need elbow room — fewer plants per rock
   },
   energy: {
     mode: 'decomp',

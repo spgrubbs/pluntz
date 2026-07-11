@@ -8,7 +8,7 @@ export const C01_FIRST_LIGHT: MapDef = {
   height: 1500,
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 300 },
   debris: { perMin: 2 },
-  fauna: { frugivora: 1, phytophaga: 1, anthophila: 2 },
+  fauna: { frugivora: 1, phytophaga: 1, anthophila: 2, scarabaeidae: 1, lampyridae: 1 },
   roundSec: 480,
   canopyWin: { share: 0.6, holdSec: 45 },
   asteroids: [
@@ -76,7 +76,7 @@ export const C03_GLOOMFALL: MapDef = {
   height: 1800,
   sun: { angleDeg: 235, cycle: false, cyclePeriodSec: 300 },
   debris: { perMin: 4 },
-  fauna: { frugivora: 2, phytophaga: 2, anthophila: 3 },
+  fauna: { frugivora: 2, phytophaga: 2, anthophila: 3, scarabaeidae: 1, lampyridae: 1 },
   roundSec: 600,
   canopyWin: { share: 0.55, holdSec: 45 },
   asteroids: [

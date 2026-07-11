@@ -21,7 +21,7 @@ const FAUNA_INFO: Record<Fauna['kind'], { name: string; gloss: string; desc: str
   scarabaeidae: {
     name: 'Scarabaeidae',
     gloss: 'rock-shover',
-    desc: 'Neutral titan. Braces against an asteroid and shoves for minutes at a time — the map is not fixed, and neither are your shadows.',
+    desc: 'Neutral titan armored in harvested rock — it mines debris and stone into its own shell. Braces against asteroids and shoves for minutes at a time; seeds can ride its back to the next rock it visits.',
   },
   araneae: {
     name: 'Araneae',

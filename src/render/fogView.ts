@@ -53,7 +53,7 @@ export class FogView {
       this.sprite.scale.set(1 / SCALE);
       this.container.removeChildren();
       this.container.addChild(this.sprite);
-      this.veil.clear().rect(0, 0, tw, th).fill({ color: FOG_COLOR, alpha: 0.9 });
+      this.veil.clear().rect(0, 0, tw, th).fill({ color: FOG_COLOR, alpha: 0.97 });
     }
 
     // collect this frame's reveal circles (world coords)
