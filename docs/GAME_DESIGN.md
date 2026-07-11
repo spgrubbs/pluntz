@@ -485,9 +485,92 @@ fungal spore reach.
 
 ---
 
+## 14. Campaign Vision — The Long Road *(design; not yet scheduled)*
+
+**The pitch:** you take one clade on a generational voyage across the cosmos toward the
+**Promised Land** — a fabled region of perfect, inexhaustible light. The campaign is one
+very long journey told across a chain of spaces, spatially and temporally far beyond a
+skirmish: hours of travel, dozens of biomes, one lineage.
+
+### 14.1 The caravan structure (how "one long map" actually plays)
+
+The journey is a **corridor of connected regions** rather than one giant simulated map
+(sim budget stays bounded; the fiction is continuous). What makes it a *journey* instead
+of a level select:
+
+- **The Dimming.** Behind you, space is dying — a slow wave of permanent darkness sweeps
+  along the corridor. Rocks it swallows go lightless forever (fungus reads this very
+  differently than everyone else…). You cannot hold ground forever; every paradise is
+  temporary. The Dimming is the campaign's clock and its dramatic engine: it forces the
+  leapfrog rhythm of *arrive → root → fatten → send the vanguard ahead → abandon the old
+  garden*.
+- **The Vanguard.** You advance by getting seeds across each region's far threshold —
+  a scarab ferry, a debris storm, a bird migration, a long-shot cone volley. What crosses
+  is literally what continues: the next region starts from the seeds/energy/mutations
+  that made it across. Everything left behind is an epitaph.
+- **Persistent lineage.** Mutations drafted along the way persist for the whole run
+  (the three-draft structure becomes per-region: shallow drafts early in the journey,
+  the weird deep biology unlocking as your lineage proves itself). Scars persist too —
+  a region you barely escaped may cost you a draft slot or a burned palette.
+- **Rest stops & story rocks.** Between contested regions, small quiet spaces: a single
+  rich rock and a strange thing to look at. These are save points, breath, and lore.
+
+### 14.2 Unique events & challenges (beyond competing)
+
+Each region gets one signature dynamic — the existing sim already supports most of these
+as *configurations*, which is the trick: puzzles are authored out of live mechanics, not
+scripted cutscenes.
+
+- **The Shadow Canyon.** A corridor of huge rocks where the sun never reaches the floor.
+  Crossing requires chaining light: lure Lampyridae from lantern-post to lantern-post to
+  keep a relay of gardens photosynthesizing in the dark. (Fungus walks it effortlessly —
+  clade-asymmetric difficulty is a feature.)
+- **The Herd.** A migration of Scarabaeidae is passing through, slowly rearranging the
+  entire region. Ride it: your seeds can cross on their shells — or fight it, as they
+  shove your home rock toward the Dimming.
+- **The Sleeper.** A dormant megafauna (an island-sized titan) sleeps at the region's
+  heart; the best light is on its back. Growth on its shell is free real estate until
+  total colony mass crosses a threshold… then it wakes, shakes, and swims away with
+  whatever survived — possibly deep into the corridor ahead (a gamble: the fastest route
+  is on the monster).
+- **The Orrery.** Rocks locked in orbital resonance; light gates open only when the
+  alignment is right. A timing/positioning puzzle: plant so canopies peak exactly when
+  the windows do, and fire the vanguard through the gap.
+- **The Graveyard.** A region of husks — a civilization of plants that didn't make it.
+  Detritivores feast; everyone else must chain anchors across dead wood. Reading the
+  ruined gardens tells you (environmental storytelling) what killed them. It's still here.
+- **Spore Storms / debris squalls.** Weather fronts that cross the region on a schedule
+  visible from far off — shelter behind rocks, or harvest the storm (serotiny cones WANT
+  to be hit).
+- **The Silence.** A zone where verbs don't work (no ping, lure, bless, prune — the
+  shepherd's voice can't reach). The colony must cross on pure autonomy: you set up the
+  instincts (via drafts), then watch. The purest expression of pillar #1.
+- **Rival pilgrims.** Other clades are making the same journey. Sometimes you contest a
+  region; sometimes the smarter play is to draft behind them and let them clear it.
+
+### 14.3 Structure & metaprogression
+
+- A run is ~6–10 regions, 10–20 minutes each: a long evening or several sittings
+  (autosave per region boundary — the existing save/resume already carries a world).
+- **Fail forward:** losing a region doesn't end the run — the Dimming just takes it, and
+  you restart the next region with only what escaped (possibly a single seed: the
+  original fantasy, rediscovered mid-campaign).
+- Campaign completion per clade is the premium metaprogression: finishing The Long Road
+  with a clade unlocks its **palette set** and a run-modifier ("New Journey+": the
+  Dimming moves faster, deeper drafts from region 1).
+- Implementation note: regions are MapDefs plus a small **RegionScript** (timed events,
+  win/exit condition, Dimming schedule) — the same data-driven pattern as maps today.
+  The threshold-crossing = a `vanguard` win condition counting seeds/plants beyond a
+  line. No new sim systems are required for the first three region archetypes (Canyon,
+  Herd, Graveyard); the Sleeper and the Orrery need one new sim feature each (mobile
+  mega-body; scripted orbital motion).
+
+---
+
 *Current state: M0–M9 + M9.1 + §13.1 mycelium + §13.3 mutations (reworked into three
 2-card drafts; wins add a third card to drafts 1..N) + §13.4 fauna (Scarabaeidae,
 Araneae with web-capture, Lampyridae lanterns, universal Lure) + §13.5 per-map fog
 (grey pall). Economy: essence removed — verbs run on per-clade cooldowns. Pace halved;
-speed is a player control. Next candidates: §13.2 (fungal identity split), remaining
-§13.5 atmosphere (off-screen events, sound), M10 Android wrap.*
+speed is a player control. Campaign vision drafted in §14 (The Long Road). Next
+candidates: §13.2 (fungal identity split), first Long Road region prototypes (§14),
+remaining §13.5 atmosphere (sound), M10 Android wrap.*
