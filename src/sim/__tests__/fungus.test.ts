@@ -74,11 +74,13 @@ describe('Basidiomycota (M8)', () => {
   it('decomposition consumes husks on its rock and feeds the web', () => {
     const w = createWorld(GLOOM, 7);
     w.debrisPerMin = 0;
-    run(w, 1500);
+    // early, before the (now spore-capable) web wraps the rock and claims
+    // every angle — plant the victim at the opposite pole while it's free
+    run(w, 300);
     const fungus = w.plants[0];
     const baseline = fungus.lastIncome;
-    // plant a rival on the fungus rock and kill it — a fresh husk buffet
-    expect(sproutAt(w, w.colonies[1].id, 'pinophyta', w.asteroids[0], Math.PI / 2)).toBe(true);
+    const opposite = fungus.anchorAngle + Math.PI;
+    expect(sproutAt(w, w.colonies[1].id, 'pinophyta', w.asteroids[0], opposite)).toBe(true);
     const victim = w.plants[w.plants.length - 1];
     run(w, 600); // let it grow some biomass
     damagePart(victim, 0, 9999); // heart death -> whole plant husks
@@ -94,6 +96,9 @@ describe('Basidiomycota (M8)', () => {
   it('spores infect living rivals; infection spreads; prune cures it', () => {
     const w = createWorld(GLOOM, 7);
     w.debrisPerMin = 0;
+    // silence the fungus itself so the only spore in play is ours — its
+    // organic bombardment (now that launches work) would drown the readings
+    damagePart(w.plants[0], 0, 9999);
     run(w, 2000);
     const victim = w.plants[1];
     expect(victim.alive).toBe(true);
@@ -108,6 +113,8 @@ describe('Basidiomycota (M8)', () => {
       age: 0,
       maxAge: 6,
       riding: -1,
+      ridingFauna: -1,
+      ignoreAst: -1,
     });
     run(w, 40);
     const infected = (): number =>
@@ -130,6 +137,29 @@ describe('Basidiomycota (M8)', () => {
       }
     }
     expect(infected()).toBe(0);
+  });
+
+  it('spores clear their own launch rock instead of face-planting into it', () => {
+    const w = createWorld(GLOOM, 7);
+    w.debrisPerMin = 0;
+    const rock = w.asteroids[0];
+    // a fresh spore born right ON the surface (like a dome launch), aimed
+    // tangentially so its early flight skims its own rock
+    w.seeds.push({
+      id: w.nextId++,
+      colonyId: w.colonies[0].id,
+      faction: 'basidiomycota',
+      pos: { x: rock.pos.x, y: rock.pos.y - rock.radius - 2 }, // grazing height
+      vel: { x: 80, y: -4 },
+      age: 0,
+      maxAge: 6,
+      riding: -1,
+      ridingFauna: -1,
+      ignoreAst: rock.id,
+    });
+    const id = w.seeds[w.seeds.length - 1].id;
+    run(w, 8); // 0.8s: inside the grace window, skimming the surface
+    expect(w.seeds.some((s2) => s2.id === id)).toBe(true); // still flying
   });
 
   it('the dying sun feeds the fungus (inverted sudden death)', () => {

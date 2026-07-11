@@ -152,6 +152,10 @@ export interface Seed {
   age: number;
   maxAge: number; // range / speed
   riding: number; // debris id it has mounted, -1 = flying free
+  ridingFauna: number; // fauna id it has hitched (scarabs), -1 = none
+  /** The launch rock: ignored for landing while the seed is young, so
+   * surface-hugging launchers (fungal domes) don't eat their own spores. */
+  ignoreAst: number;
 }
 
 export interface Ping {

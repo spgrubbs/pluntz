@@ -123,6 +123,37 @@ describe('new fauna (13.4)', () => {
     expect(d1).toBeLessThan(d0); // and drawn toward the scent
   });
 
+  it('seeds hitch rides on scarabs and hop off at the next rock', () => {
+    const w = createWorld(TITANS, 11);
+    w.debrisPerMin = 0;
+    const scarab = w.fauna.find((f) => f.kind === 'scarabaeidae')!;
+    // park the titan in open space and toss a seed onto its shell
+    scarab.pos = { x: -300, y: 600 };
+    scarab.vel = { x: 0, y: 0 };
+    scarab.state = 'wander';
+    scarab.timer = 999; // no shove: we drive it by hand
+    w.seeds.push({
+      id: w.nextId++,
+      colonyId: w.colonies[0].id,
+      faction: 'anthophyta',
+      pos: { x: scarab.pos.x + 4, y: scarab.pos.y },
+      vel: { x: 0, y: 0 },
+      age: 0,
+      maxAge: 3,
+      riding: -1,
+      ridingFauna: -1,
+      ignoreAst: w.asteroids[0].id,
+    });
+    stepWorld(w, TUNING.simDt);
+    const seed = w.seeds[w.seeds.length - 1];
+    expect(seed.ridingFauna).toBe(scarab.id); // mounted
+    // carry it to the empty second rock; the seed should hop off and sprout
+    const dest = w.asteroids[1];
+    scarab.pos = { x: dest.pos.x - dest.radius - 20, y: dest.pos.y };
+    stepWorld(w, TUNING.simDt);
+    expect(w.plants.some((p) => p.asteroidId === dest.id)).toBe(true);
+  });
+
   it('webs never snare a Scarabaeidae', () => {
     const w = createWorld(TITANS, 11);
     w.debrisPerMin = 0;

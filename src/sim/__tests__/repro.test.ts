@@ -96,6 +96,8 @@ describe('reproduction (M4)', () => {
       age: 0,
       maxAge: 0.1, // would fizzle almost immediately if it weren't riding
       riding: -1,
+      ridingFauna: -1,
+      ignoreAst: -1,
     });
     // the seed's own maxAge (0.1s) would fizzle it in flight; only by mounting
     // the debris and riding to impact can it reach and colonize the far rock

@@ -10,7 +10,7 @@ export const CONTACT01: MapDef = {
   width: 2600,
   height: 1800,
   sun: { angleDeg: 225, cycle: false, cyclePeriodSec: 300 },
-  debris: { perMin: 2 },
+  debris: { perMin: 3 },
   fauna: { frugivora: 2, phytophaga: 2, anthophila: 3 },
   roundSec: 600,
   canopyWin: { share: 0.55, holdSec: 45 },

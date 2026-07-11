@@ -146,7 +146,7 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
   const colony = world.colonies.find((c) => c.id === colonyId);
   if (!colony || !verbReady(world, colony, 'lure')) return false;
   useVerb(world, colony, 'lure');
-  const life = 40 * colonyMods(colony).lureDurationMult;
+  const life = TUNING.verbs.lureLife * colonyMods(colony).lureDurationMult;
   world.lure = { x: pos.x, y: pos.y, colonyId, expires: world.time + life };
   emit({ type: 'lure', x: pos.x, y: pos.y });
   return true;
@@ -805,6 +805,34 @@ function stepSeeds(world: World, dt: number): void {
       continue;
     }
 
+    // riding a Scarabaeidae: cling to the shell until it braces against a
+    // NEW rock, then hop off and sprout there — the titan as a ferry
+    if (s.ridingFauna >= 0) {
+      const mount = world.fauna.find((f) => f.id === s.ridingFauna);
+      if (!mount) {
+        emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+        world.seeds.splice(i, 1);
+        continue;
+      }
+      s.pos.x = mount.pos.x;
+      s.pos.y = mount.pos.y;
+      let dropped = false;
+      for (const ast of world.asteroids) {
+        if (ast.id === s.ignoreAst) continue; // not back onto the birth rock
+        if (dist(s.pos, ast.pos) < ast.radius + 26) {
+          const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
+          const ok = sproutAt(world, s.colonyId, s.faction, ast, angle);
+          const at = add(ast.pos, scale(fromAngle(angle), ast.radius));
+          emit({ type: ok ? 'seedLand' : 'seedFizzle', x: at.x, y: at.y, faction: s.faction });
+          world.seeds.splice(i, 1);
+          dropped = true;
+          break;
+        }
+      }
+      if (dropped) continue;
+      continue;
+    }
+
     // Windborne: seeds feel the pull of nearby rocks and curve toward them
     if (modsBy.get(s.colonyId)?.windborne) {
       let pullTo: Vec2 | null = null;
@@ -830,14 +858,25 @@ function stepSeeds(world: World, dt: number): void {
       world.seeds.splice(i, 1);
       continue;
     }
-    // mount a drifting rock whose path it crosses — hitch a long ride
+    // mount a drifting rock — or a passing Scarabaeidae — and hitch a ride
     let mounted = false;
     for (const d of world.debris) {
-      if (dist(s.pos, d.pos) < d.radius + 6) {
+      if (dist(s.pos, d.pos) < d.radius + 10) {
         s.riding = d.id;
         emit({ type: 'sprout', x: s.pos.x, y: s.pos.y, faction: s.faction });
         mounted = true;
         break;
+      }
+    }
+    if (!mounted) {
+      for (const fn of world.fauna) {
+        if (fn.kind !== 'scarabaeidae') continue;
+        if (dist(s.pos, fn.pos) < 18) {
+          s.ridingFauna = fn.id;
+          emit({ type: 'sprout', x: s.pos.x, y: s.pos.y, faction: s.faction });
+          mounted = true;
+          break;
+        }
       }
     }
     if (mounted) continue;
@@ -869,6 +908,9 @@ function stepSeeds(world: World, dt: number): void {
       continue;
     }
     for (const ast of world.asteroids) {
+      // grace period: a fresh seed flies OVER its own launch rock instead of
+      // face-planting into it (dome launchers sit right on the surface)
+      if (ast.id === s.ignoreAst && s.age < 1.2) continue;
       if (dist(s.pos, ast.pos) < ast.radius + 4) {
         const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
         const ok = sproutAt(world, s.colonyId, s.faction, ast, angle);

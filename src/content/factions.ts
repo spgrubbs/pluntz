@@ -366,7 +366,7 @@ export const BASIDIOMYCOTA: FactionDef = {
   name: 'Basidiomycota',
   render: { leaf: 'gill', heart: 'dome', repro: 'dome' },
   terms: { leaf: 'gills', leafOne: 'gill', cone: 'fruiting dome', trunk: 'mycelium' },
-  verbHaste: { prune: 0.5 }, // intimate with death: the knife returns quickly
+  verbHaste: { ping: 0.5 }, // the web echoes: attention verbs come back fast
   myco: {
     startLen: 34,
     spreadLen: 1.15, // wraps a mid-size rock in ~4 min, not 90s
@@ -438,7 +438,7 @@ export const BASIDIOMYCOTA: FactionDef = {
     style: 'ballistic',
     sporeFan: 3,
     infects: true,
-    coneMax: 3,
+    coneMax: 2, // spores WORK now — three domes at once was a firehose
     coneCost: 6,
     coneEnergy: 26,
     chargeRate: 2.0,

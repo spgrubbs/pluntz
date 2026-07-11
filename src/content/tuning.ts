@@ -40,7 +40,8 @@ export const TUNING = {
     blessIncomeMult: 1.5,
     blessCooldownMult: 0.55,
     /** Verb cooldowns (sim seconds). Clades flavor these via verbHaste. */
-    cooldown: { ping: 12, lure: 70, bless: 55, prune: 20 },
+    cooldown: { ping: 12, lure: 40, bless: 55, prune: 20 },
+    lureLife: 10, // short and punchy: fauna answer, then resume their lives
   },
 
   debris: {

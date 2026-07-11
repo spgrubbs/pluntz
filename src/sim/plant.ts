@@ -152,6 +152,8 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
               age: 0,
               maxAge: 3.5,
               riding: -1,
+              ridingFauna: -1,
+              ignoreAst: plant.asteroidId,
             });
             emit({ type: 'seedLaunch', x: at.x, y: at.y, faction: owner.faction });
           }
@@ -591,6 +593,8 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
       age: 0,
       maxAge: range / R.seedSpeed,
       riding: -1,
+      ridingFauna: -1,
+      ignoreAst: plant.asteroidId,
     });
   }
   emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });
@@ -844,6 +848,8 @@ export function pruneAlongPath(world: World, plant: Plant, path: Vec2[]): PruneR
         age: 0,
         maxAge: 2.6,
         riding: -1,
+        ridingFauna: -1,
+        ignoreAst: plant.asteroidId,
       });
       emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });
     }

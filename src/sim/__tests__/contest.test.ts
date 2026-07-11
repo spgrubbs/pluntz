@@ -89,6 +89,8 @@ describe('competition (M5)', () => {
       age: 0,
       maxAge: 5,
       riding: -1,
+      ridingFauna: -1,
+      ignoreAst: -1,
     });
     for (let i = 0; i < 30; i++) stepWorld(w, TUNING.simDt);
     // (other colonies may have seeds in flight; ours resolved within maxAge)
