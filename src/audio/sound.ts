@@ -57,6 +57,9 @@ export class SoundSystem {
   private lastSfx = new Map<string, number>();
   private mood: Mood = 'calm';
   private brightness = 1; // sunFactor
+  private intensity = 0; // 0 peace .. 1 open war — drives tempo & aggression
+  private nextPulseAt = 0;
+  private pulseStep = 0;
   muted = false;
 
   constructor() {
@@ -135,13 +138,23 @@ export class SoundSystem {
     }
   }
 
-  /** Per-frame world mood: danger darkens the key, the dim sun closes it. */
-  setMood(mood: Mood, sunFactor: number): void {
+  /**
+   * Per-frame world mood. `intensity` (0..1) is the war meter: it speeds the
+   * pluck grid and chord cycle, tightens the drum pulse in, and lets saw
+   * voices bleed into the pads — peace is a garden, war is a march.
+   */
+  setMood(mood: Mood, sunFactor: number, intensity = 0): void {
     this.mood = mood;
     this.brightness = sunFactor;
+    // ratchet up fast, cool down slow — battles flare, aftermaths linger
+    this.intensity += (intensity - this.intensity) * (intensity > this.intensity ? 0.25 : 0.02);
     if (!this.ctx) return;
     const target =
-      mood === 'lost' ? 350 : mood === 'won' ? 2400 : 500 + 1300 * sunFactor * (mood === 'tension' ? 0.6 : 1);
+      mood === 'lost'
+        ? 350
+        : mood === 'won'
+          ? 2400
+          : (500 + 1300 * sunFactor) * (1 - this.intensity * 0.35) + this.intensity * 900;
     this.filter.frequency.setTargetAtTime(target, this.ctx.currentTime, 1.2);
   }
 
@@ -162,6 +175,7 @@ export class SoundSystem {
 
     this.nextChordAt = ctx.currentTime + 0.2;
     this.nextPluckAt = ctx.currentTime + 1.5;
+    this.nextPulseAt = ctx.currentTime + 2;
     this.nextShimmerAt = ctx.currentTime + 6;
     window.setInterval(() => this.schedule(), 120); // lives as long as the app
   }
@@ -169,35 +183,85 @@ export class SoundSystem {
   private schedule(): void {
     const ctx = this.ctx!;
     const ahead = ctx.currentTime + 0.35;
+    const war = this.intensity;
+    // war accelerates everything: ~96 bpm at peace, ~150 in open battle
+    const tempo = 1 + war * 0.55;
 
-    // chord changes: an 8.5s breath, each voice swelling in slowly
+    // chord changes: a long breath in peace, urgent turns in war
     if (this.nextChordAt < ahead) {
       this.playChord(this.nextChordAt);
-      this.nextChordAt += 8.5;
+      this.nextChordAt += 8.5 / (1 + war * 0.55);
     }
 
-    // the kalimba line: gentle forward motion, eighth-ish grid with rests
-    // (~96 bpm eighths); density rises with brightness, thins in tension
-    const pluckGap = 0.3125;
+    // the kalimba line: denser AND faster as the fighting rises
+    const pluckGap = 0.3125 / tempo;
     while (this.nextPluckAt < ahead) {
-      const density = this.mood === 'tension' ? 0.32 : 0.45 + this.brightness * 0.2;
-      if (this.mood !== 'lost' && Math.random() < density) {
+      const density =
+        this.mood === 'lost' ? 0 : (0.42 + this.brightness * 0.18) * (1 - war * 0.15) + war * 0.3;
+      if (Math.random() < density) {
         this.pluck(this.nextPluckAt);
+        // battle plucks strike in urgent pairs
+        if (war > 0.5 && Math.random() < war * 0.4) {
+          this.pluck(this.nextPluckAt + pluckGap * 0.5, undefined, 0.7);
+        }
       }
       this.pluckStep++;
       // organic timing: the grid itself sways a few ms
       this.nextPluckAt += pluckGap + Math.sin(this.pluckStep * 0.7) * 0.012;
     }
 
-    // shimmer bells: rare high washes through the reverb
+    // the war drum: silent in peace, a driving low pulse as colonies clash
+    const beat = 0.625 / tempo;
+    while (this.nextPulseAt < ahead) {
+      if (war > 0.12 && this.mood !== 'won' && this.mood !== 'lost') {
+        const accent = this.pulseStep % 4 === 0;
+        this.drum(this.nextPulseAt, war * (accent ? 1 : 0.55), accent);
+      }
+      this.pulseStep++;
+      this.nextPulseAt += beat;
+    }
+
+    // shimmer bells: rare high washes through the reverb (peace only)
     if (this.nextShimmerAt < ahead) {
-      if (this.mood !== 'lost') this.shimmer(this.nextShimmerAt);
+      if (this.mood !== 'lost' && war < 0.4) this.shimmer(this.nextShimmerAt);
       this.nextShimmerAt += 9 + Math.random() * 14;
     }
   }
 
+  /** The war drum: a deep taiko thump with a skin-slap, scaled by intensity. */
+  private drum(when: number, strength: number, accent: boolean): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(accent ? 92 : 74, when);
+    osc.frequency.exponentialRampToValueAtTime(38, when + 0.16);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.14 * strength, when);
+    g.gain.exponentialRampToValueAtTime(0.0008, when + 0.24);
+    osc.connect(g);
+    g.connect(this.musicBus);
+    osc.start(when);
+    osc.stop(when + 0.28);
+    if (accent) {
+      const noise = ctx.createBufferSource();
+      noise.buffer = this.noiseBuf(0.05);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1600;
+      bp.Q.value = 1.2;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.05 * strength, when);
+      ng.gain.exponentialRampToValueAtTime(0.0005, when + 0.05);
+      noise.connect(bp);
+      bp.connect(ng);
+      ng.connect(this.musicBus);
+      noise.start(when);
+    }
+  }
+
   private currentChord(): number[] {
-    const set = this.mood === 'tension' || this.mood === 'lost' ? CHORDS_TENSION : CHORDS_CALM;
+    const dark = this.mood === 'lost' || this.intensity > 0.35;
+    const set = dark ? CHORDS_TENSION : CHORDS_CALM;
     return set[this.chordIx % set.length];
   }
 
@@ -215,7 +279,9 @@ export class SoundSystem {
     for (let i = 0; i < chord.length; i++) {
       for (const detune of [-4, 3]) {
         const osc = ctx.createOscillator();
-        osc.type = i === 0 ? 'sine' : 'triangle';
+        // war lets sawteeth bleed into the pad — the same chords, but armed
+        osc.type =
+          i === 0 ? 'sine' : this.intensity > 0.55 && i === chord.length - 1 ? 'sawtooth' : 'triangle';
         osc.frequency.value = st(chord[i]);
         osc.detune.value = detune;
         const gain = ctx.createGain();

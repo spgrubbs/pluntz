@@ -500,6 +500,13 @@ fungal spore reach.
 very long journey told across a chain of spaces, spatially and temporally far beyond a
 skirmish: hours of travel, dozens of biomes, one lineage.
 
+**First region shipped:** *LR·I · Shadow Canyon* (`r01`) — the Dimming
+(`MapDef.dimming`: a darkness front sweeping +x where photosynthesis ends; decomposers
+are untouched), the vanguard win (`MapDef.vanguard`: hold the threshold rock 30s,
+contested holds reset), a canyon of wall-rocks whose floor is crossable by Lampyridae
+lure-relay, a sunlit southern detour raced by rival Pilgrims, and the round chip reading
+the gap between your leading edge and the front.
+
 ### 14.1 The caravan structure (how "one long map" actually plays)
 
 The journey is a **corridor of connected regions** rather than one giant simulated map
@@ -579,6 +586,7 @@ scripted cutscenes.
 2-card drafts; wins add a third card to drafts 1..N) + §13.4 fauna (Scarabaeidae,
 Araneae with web-capture, Lampyridae lanterns, universal Lure) + §13.5 per-map fog
 (grey pall). Economy: essence removed — verbs run on per-clade cooldowns. Pace halved;
-speed is a player control. Procedural music + SFX + UI sound shipped. Campaign vision
-drafted in §14 (The Long Road). Next candidates: §13.2 (fungal identity split), first
-Long Road region prototypes (§14), M10 Android wrap.*
+speed is a player control. Procedural music + SFX + UI sound shipped, now war-dynamic
+(tempo/drums/aggression scale with battle intensity). Long Road region I (Shadow Canyon)
+shipped with the Dimming + vanguard systems. Next candidates: §13.2 (fungal identity
+split), Long Road regions II+ (§14), M10 Android wrap.*

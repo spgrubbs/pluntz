@@ -17,6 +17,7 @@ import { PruneView } from './render/pruneView';
 import { FxView } from './render/fxView';
 import { FogView } from './render/fogView';
 import { Lerper } from './render/lerp';
+import { DimmingView } from './render/dimmingView';
 import { FaunaView } from './render/faunaView';
 import { SeedView } from './render/seedView';
 import { PingView } from './render/pingView';
@@ -92,6 +93,7 @@ async function boot(): Promise<void> {
   const seedView = new SeedView();
   const pingView = new PingView();
   const fogView = new FogView();
+  const dimmingView = new DimmingView();
   const lerper = new Lerper();
   const aimG = new Graphics();
   worldRoot.addChild(
@@ -101,6 +103,7 @@ async function boot(): Promise<void> {
     seedView.g,
     faunaView.container,
     fxView.g,
+    dimmingView.container, // the Dimming swallows everything beneath it
     fogView.container, // the veil sits over the world, under the player's own marks
     pingView.g,
     pruneView.g,
@@ -507,7 +510,20 @@ async function boot(): Promise<void> {
       .join(' · ');
     let clock: string;
     if (world.roundState !== 'playing') clock = 'round over';
-    else if (world.roundSec > 0 && world.time > world.roundSec) clock = '☀ THE SUN FADES';
+    else if (world.dimming) {
+      // measure to the colony's LEADING edge — the part of you that can still run
+      let east = -Infinity;
+      for (const p of world.plants) {
+        if (p.alive && p.colonyId === playerColonyId) east = Math.max(east, p.astPos.x);
+      }
+      const gap = east === -Infinity ? null : Math.round(east - world.dimming.x);
+      clock =
+        gap === null
+          ? '◐ THE DIMMING ADVANCES'
+          : gap <= 0
+            ? '◐ THE DIMMING HAS YOU'
+            : `◐ the Dimming · ${gap} behind you`;
+    } else if (world.roundSec > 0 && world.time > world.roundSec) clock = '☀ THE SUN FADES';
     else if (world.roundSec > 0) clock = `☀ fades in ${fmtTime(world.roundSec - world.time)}`;
     else clock = '';
     let hold = '';
@@ -532,13 +548,17 @@ async function boot(): Promise<void> {
       const rival = world.colonies.find((c) => !c.isPlayer)?.name ?? 'the rival';
       const won = world.roundState === 'won';
       const line =
-        world.endReason === 'canopy'
+        world.endReason === 'vanguard'
           ? won
-            ? `Your canopy owns the light. ${rival} wither in your shade (${t}).`
-            : `The ${rival} canopy owns the light. You wither in their shade (${t}).`
-          : won
-            ? `The void is yours. The last ${rival} heartseed went dark at ${t}.`
-            : `Your last heartseed went dark at ${t}. The ${rival} overgrow your bones.`;
+            ? `Your vanguard holds the threshold (${t}). The Promised Land is one region closer.`
+            : `The ${rival} took the threshold at ${t}. Their road continues; yours ends here.`
+          : world.endReason === 'canopy'
+            ? won
+              ? `Your canopy owns the light. ${rival} wither in your shade (${t}).`
+              : `The ${rival} canopy owns the light. You wither in their shade (${t}).`
+            : won
+              ? `The void is yours. The last ${rival} heartseed went dark at ${t}.`
+              : `Your last heartseed went dark at ${t}. The ${rival} overgrow your bones.`;
       banner.innerHTML = `
         <h1 class="${won ? 'win' : 'loss'}">${won ? 'OVERGROWTH' : 'EXTINCTION'}</h1>
         <p>${line}</p>
@@ -607,19 +627,22 @@ async function boot(): Promise<void> {
 
     // sound hears the events first (impacts, deaths, launches), then fx
     for (const ev of world.events) {
-      if (ev.type === 'impact' || ev.type === 'partDied') danger = Math.min(danger + 0.12, 3);
+      if (ev.type === 'impact') danger = Math.min(danger + 0.05, 3);
+      else if (ev.type === 'partDied') danger = Math.min(danger + 0.3, 3);
     }
     SOUND.ingest(world.events, { x: camera.x, y: camera.y }, camera.zoom);
-    danger = Math.max(0, danger - frame * 0.25);
+    danger = Math.max(0, danger - frame * 0.22);
+    const warIntensity = Math.min(danger / 1.4, 1);
     SOUND.setMood(
       world.roundState === 'won'
         ? 'won'
         : world.roundState === 'lost'
           ? 'lost'
-          : danger > 0.8
+          : warIntensity > 0.35
             ? 'tension'
             : 'calm',
       world.sunFactor,
+      warIntensity,
     );
 
     // particles: drain sim events, shed wound motes, integrate
@@ -632,6 +655,7 @@ async function boot(): Promise<void> {
     // fog of war: only on maps that ask for it (render-only veil)
     fogView.enabled = !!map.fog;
     fogView.update(world, playerColonyId, app.renderer);
+    dimmingView.update(world);
 
     // an actively-aimed cone never self-fires out from under the player
     if (aiming) {

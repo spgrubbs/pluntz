@@ -233,7 +233,13 @@ export interface World {
   sunFactor: number; // 1 normally, ramps down in sudden death
   roundState: 'playing' | 'won' | 'lost';
   endedAt: number; // sim time the round ended, -1 while playing
-  endReason: 'domination' | 'canopy' | '';
+  endReason: 'domination' | 'canopy' | 'vanguard' | '';
+  /** The Long Road's darkness front: x coordinate sweeping rightward. */
+  dimming: { x: number; speed: number } | null;
+  /** Vanguard threshold (Long Road): first colony to hold it wins the region. */
+  vanguard: { asteroidId: number; holdSec: number } | null;
+  vanguardHolder: number; // colonyId currently rooted on the threshold, -1 none
+  vanguardHeldSec: number;
   /** Canopy win condition tracking (when the map defines canopyWin). */
   canopyWin: { share: number; holdSec: number } | null;
   canopyHolder: number; // colonyId currently above the share threshold, -1 none
@@ -253,6 +259,12 @@ export interface MapDef {
   /** Fog of war: a special feature of a few maps, not omnipresent. Render-only
    * veil — the sim always runs the whole map, so determinism is untouched. */
   fog?: boolean;
+  /** The Long Road: a wave of permanent darkness sweeping +x from startX.
+   * Photosynthesis dies behind the front; the region must be outrun. */
+  dimming?: { startX: number; speed: number };
+  /** The Long Road: hold an alive plant on this asteroid (index) for holdSec
+   * to cross the threshold and win the region. Rivals can steal it. */
+  vanguard?: { asteroid: number; holdSec: number };
   canopyWin?: { share: number; holdSec: number };
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
   colonies: {

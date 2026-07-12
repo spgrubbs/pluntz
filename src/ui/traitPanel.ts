@@ -82,7 +82,7 @@ export class TraitPanel {
         card.addEventListener('click', () => {
           if (chooseMutation(world, c.id, id)) {
             SOUND.ui('pick');
-            this.rebuild();
+            this.hide(); // decision made — back to the garden
           }
         });
         this.listEl.appendChild(card);

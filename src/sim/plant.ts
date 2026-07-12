@@ -238,11 +238,17 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
           ? (mods.canopyShadeOverride ?? f.energy.canopyShade)
           : (mods.shadeFloorOverride ?? f.energy.shadeFloor);
     const angleEff = Math.max(Math.abs(dot(p.dir, toSun)), f.energy.minAngleEff);
+    // the Dimming: light simply ends behind the front (soft 200-unit band).
+    // Decomposers never notice — the dark is their country.
+    const dimMul = world.dimming
+      ? Math.min(Math.max((plant.astPos.x - world.dimming.x) / 200, 0), 1)
+      : 1;
     income +=
       f.energy.leafIncome *
       angleEff *
       shadeMult *
       world.sunFactor *
+      dimMul *
       mods.leafIncome *
       (blessed ? TUNING.verbs.blessIncomeMult : 1);
   }

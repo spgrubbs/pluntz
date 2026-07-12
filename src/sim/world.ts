@@ -60,6 +60,10 @@ export function createWorld(map: MapDef, seed: number): World {
     canopyHeldSec: 0,
     canopyShares: [],
     canopyWin: map.canopyWin ?? null,
+    dimming: map.dimming ? { x: map.dimming.startX, speed: map.dimming.speed } : null,
+    vanguard: null, // resolved to an asteroid id below, once rocks exist
+    vanguardHolder: -1,
+    vanguardHeldSec: 0,
   };
   for (const def of map.asteroids) {
     const ast: Asteroid = {
@@ -91,6 +95,12 @@ export function createWorld(map: MapDef, seed: number): World {
     world.plants.push(
       createPlant(world, ast, s.anchorDeg * (Math.PI / 180), colony.faction, colony.id),
     );
+  }
+  if (map.vanguard) {
+    world.vanguard = {
+      asteroidId: world.asteroids[map.vanguard.asteroid].id,
+      holdSec: map.vanguard.holdSec,
+    };
   }
   const fauna = map.fauna ?? {};
   for (const kind of [
@@ -833,11 +843,14 @@ function stepSeeds(world: World, dt: number): void {
       continue;
     }
 
-    // Windborne: seeds feel the pull of nearby rocks and curve toward them
-    if (modsBy.get(s.colonyId)?.windborne) {
+    // Windborne: after a couple seconds of free flight the seed starts to
+    // feel nearby rocks — a short-range terminal-guidance curve, never a
+    // tractor beam (and never back toward its own launch rock)
+    if (s.age > 2 && modsBy.get(s.colonyId)?.windborne) {
       let pullTo: Vec2 | null = null;
-      let bd = 260;
+      let bd = 150;
       for (const a of world.asteroids) {
+        if (a.id === s.ignoreAst) continue;
         const d = dist(s.pos, a.pos) - a.radius;
         if (d > 8 && d < bd) {
           bd = d;
@@ -845,7 +858,7 @@ function stepSeeds(world: World, dt: number): void {
         }
       }
       if (pullTo) {
-        const pull = scale(norm(sub(pullTo, s.pos)), 60 * dt);
+        const pull = scale(norm(sub(pullTo, s.pos)), 80 * dt);
         s.vel.x += pull.x;
         s.vel.y += pull.y;
       }
@@ -993,8 +1006,12 @@ export function stepWorld(world: World, dt: number): void {
   stepFauna(world, dt);
   if (world.tick % 5 === 0) applyContactDamage(world, dt * 5);
   stepDeaths(world);
+  if (world.dimming && world.roundState === 'playing') {
+    world.dimming.x += world.dimming.speed * dt; // the darkness never rests
+  }
   if (world.tick % 10 === 0) {
     stepCanopyControl(world, dt * 10);
+    stepVanguard(world, dt * 10);
     stepMutations(world);
     checkRoundEnd(world);
   }
@@ -1185,6 +1202,35 @@ function applyContactDamage(world: World, dt: number): void {
       }
     }
   }
+}
+
+/** The Long Road: whoever keeps a living plant on the threshold rock long
+ * enough crosses into the next region — and ends this one. */
+function stepVanguard(world: World, interval: number): void {
+  if (!world.vanguard || world.roundState !== 'playing') return;
+  let holder = -1;
+  for (const p of world.plants) {
+    if (!p.alive || p.asteroidId !== world.vanguard.asteroidId) continue;
+    if (holder === -1) holder = p.colonyId;
+    else if (holder !== p.colonyId) return void resetHold(world); // contested
+  }
+  if (holder === -1) return void resetHold(world);
+  if (holder !== world.vanguardHolder) {
+    world.vanguardHolder = holder;
+    world.vanguardHeldSec = 0;
+  }
+  world.vanguardHeldSec += interval;
+  if (world.vanguardHeldSec >= world.vanguard.holdSec) {
+    const player = world.colonies.find((c) => c.isPlayer);
+    world.roundState = holder === player?.id ? 'won' : 'lost';
+    world.endReason = 'vanguard';
+    world.endedAt = world.time;
+  }
+}
+
+function resetHold(world: World): void {
+  world.vanguardHolder = -1;
+  world.vanguardHeldSec = 0;
 }
 
 function checkRoundEnd(world: World): void {
@@ -1387,6 +1433,8 @@ export function hashWorld(world: World): number {
     mix(a.pos.x); // scarabs move rocks: their positions are live state
     mix(a.pos.y);
   }
+  mix(world.dimming ? world.dimming.x : -1);
+  mix(world.vanguardHeldSec * 10);
   for (const p of world.plants) {
     mix(p.energy * 100);
     mix(p.parts.length);
