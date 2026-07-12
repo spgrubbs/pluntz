@@ -27,6 +27,7 @@ import { TraitPanel } from './ui/traitPanel';
 import { Menu, type GameConfig } from './ui/menu';
 import { bless, verbReady, useVerb, type VerbId } from './sim/stats';
 import { bonusDepthFor, recordWin } from './ui/profile';
+import { SOUND } from './audio/sound';
 
 async function boot(): Promise<void> {
   const app = new Application();
@@ -38,6 +39,9 @@ async function boot(): Promise<void> {
     autoDensity: true,
   });
   document.body.appendChild(app.canvas);
+  // audio wakes on the first gesture (autoplay policy)
+  window.addEventListener('pointerdown', () => SOUND.unlock(), { once: true });
+  window.addEventListener('keydown', () => SOUND.unlock(), { once: true });
 
   // --- World config (URL params seed the menu; menu owns the choice) ----------
   const params = new URLSearchParams(location.search);
@@ -228,6 +232,7 @@ async function boot(): Promise<void> {
   const pruneBtn = document.createElement('button');
   pruneBtn.textContent = '✂ prune';
   pruneBtn.addEventListener('click', () => {
+    SOUND.ui('select');
     pruneMode = !pruneMode;
     pingMode = false;
     pingBtn.classList.remove('active');
@@ -237,6 +242,7 @@ async function boot(): Promise<void> {
   const pingBtn = document.createElement('button');
   pingBtn.textContent = '◎ ping';
   pingBtn.addEventListener('click', () => {
+    SOUND.ui('select');
     pingMode = !pingMode;
     pruneMode = false;
     blessMode = false;
@@ -248,6 +254,7 @@ async function boot(): Promise<void> {
   const blessBtn = document.createElement('button');
   blessBtn.textContent = '✦ bless';
   blessBtn.addEventListener('click', () => {
+    SOUND.ui('select');
     blessMode = !blessMode;
     pruneMode = false;
     pingMode = false;
@@ -259,6 +266,7 @@ async function boot(): Promise<void> {
   const lureBtn = document.createElement('button');
   lureBtn.textContent = '✿ lure';
   lureBtn.addEventListener('click', () => {
+    SOUND.ui('select');
     lureMode = !lureMode;
     pruneMode = false;
     pingMode = false;
@@ -287,6 +295,7 @@ async function boot(): Promise<void> {
     trayToggle.classList.toggle('active', trayOpen);
   };
   trayToggle.addEventListener('click', () => {
+    SOUND.ui(trayOpen ? 'close' : 'open');
     trayOpen = !trayOpen;
     syncTray();
   });
@@ -308,10 +317,23 @@ async function boot(): Promise<void> {
     b.textContent = stop.label;
     b.dataset.mult = String(stop.mult);
     b.addEventListener('click', () => {
+      SOUND.ui('click');
       speed = PLAY_SPEED * stop.mult;
     });
     speedBar.appendChild(b);
   }
+  // the ear switch lives with the other global controls
+  const muteBtn = document.createElement('button');
+  const syncMute = (): void => {
+    muteBtn.textContent = SOUND.muted ? '🔇' : '🔊';
+  };
+  muteBtn.addEventListener('click', () => {
+    SOUND.unlock();
+    SOUND.setMuted(!SOUND.muted);
+    syncMute();
+  });
+  syncMute();
+  speedBar.appendChild(muteBtn);
   document.getElementById('ui')!.appendChild(speedBar);
   function syncSpeedBar(): void {
     speedBar.querySelectorAll<HTMLElement>('button').forEach((b) => {
@@ -456,7 +478,10 @@ async function boot(): Promise<void> {
   const roundChip = document.createElement('div');
   roundChip.className = 'roundchip';
   roundChip.title = 'evolution — mutations & offers';
-  roundChip.addEventListener('click', () => traitPanel.toggle());
+  roundChip.addEventListener('click', () => {
+    SOUND.ui(traitPanel.isOpen() ? 'close' : 'open');
+    traitPanel.toggle();
+  });
   document.getElementById('ui')!.appendChild(roundChip);
   const banner = document.createElement('div');
   banner.className = 'banner';
@@ -502,6 +527,7 @@ async function boot(): Promise<void> {
         const pc = world.colonies.find((c) => c.id === playerColonyId);
         if (pc) recordWin(pc.faction);
       }
+      SOUND.ui(world.roundState === 'won' ? 'win' : 'lose');
       const t = fmtTime(world.endedAt);
       const rival = world.colonies.find((c) => !c.isPlayer)?.name ?? 'the rival';
       const won = world.roundState === 'won';
@@ -531,6 +557,7 @@ async function boot(): Promise<void> {
 
   // --- Fixed-timestep loop ---------------------------------------------------------
   let acc = 0;
+  let danger = 0; // decaying violence meter -> music tension
   let last = performance.now();
   let fpsEma = 60;
   let tickMsEma = 0;
@@ -577,6 +604,23 @@ async function boot(): Promise<void> {
     faunaView.update(world, lerper);
     pingView.update(world);
     pruneView.update(prunePath);
+
+    // sound hears the events first (impacts, deaths, launches), then fx
+    for (const ev of world.events) {
+      if (ev.type === 'impact' || ev.type === 'partDied') danger = Math.min(danger + 0.12, 3);
+    }
+    SOUND.ingest(world.events, { x: camera.x, y: camera.y }, camera.zoom);
+    danger = Math.max(0, danger - frame * 0.25);
+    SOUND.setMood(
+      world.roundState === 'won'
+        ? 'won'
+        : world.roundState === 'lost'
+          ? 'lost'
+          : danger > 0.8
+            ? 'tension'
+            : 'calm',
+      world.sunFactor,
+    );
 
     // particles: drain sim events, shed wound motes, integrate
     fxView.ingest(world.events);
@@ -634,6 +678,7 @@ async function boot(): Promise<void> {
     roundChip.classList.toggle('offer', offerWaiting);
     if (offerWaiting && !offerAnnounced && !menu.isOpen()) {
       offerAnnounced = true;
+      SOUND.ui('offer');
       traitPanel.show();
     }
     if (!offerWaiting) offerAnnounced = false;

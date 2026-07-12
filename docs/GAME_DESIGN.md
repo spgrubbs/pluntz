@@ -477,7 +477,15 @@ The game should feel larger and less controllable:
   two scarabs redrawing the rocks, and a rival growing unseen.
 - **Bigger maps** with more happening off-screen: drifting derelict husks, spore storms,
   wandering megafauna, debris fields — events you react to, not cause.
-- Sound/music pass for mood (procedural, same manifest pattern as art).
+- Sound/music pass for mood (procedural, same manifest pattern as art). **Shipped**
+  (`src/audio/sound.ts`, all Web-Audio-synthesized, zero assets): an ethereal/organic
+  score — Lydian pads breathing on an 8.5s cycle over a kalimba pluck line and rare
+  shimmer bells, all through a generated-impulse reverb. Game state bends it: violence
+  pushes the harmony minor, the dying sun closes the filter, win/lose resolve or collapse
+  it. SFX are impact-forward and distance-attenuated from the camera (thump/crash/heart
+  toll/whoosh/sonar), with musical events (sprouts, blessings, lure) quantized to the
+  current chord. UI has its own voice: clicks, open/close, the draft-arrival arpeggio,
+  pick confirmations, win/lose fanfares. Mute toggle in the speed bar, persisted.
 
 ### 13.6 Done in M9.1
 Debris-riding seeds/spores; collapsible non-blocking verb tray; fauna behavior overhaul;
@@ -571,6 +579,6 @@ scripted cutscenes.
 2-card drafts; wins add a third card to drafts 1..N) + §13.4 fauna (Scarabaeidae,
 Araneae with web-capture, Lampyridae lanterns, universal Lure) + §13.5 per-map fog
 (grey pall). Economy: essence removed — verbs run on per-clade cooldowns. Pace halved;
-speed is a player control. Campaign vision drafted in §14 (The Long Road). Next
-candidates: §13.2 (fungal identity split), first Long Road region prototypes (§14),
-remaining §13.5 atmosphere (sound), M10 Android wrap.*
+speed is a player control. Procedural music + SFX + UI sound shipped. Campaign vision
+drafted in §14 (The Long Road). Next candidates: §13.2 (fungal identity split), first
+Long Road region prototypes (§14), M10 Android wrap.*

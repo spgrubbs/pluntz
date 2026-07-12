@@ -1,6 +1,7 @@
 import type { FactionId } from '../sim/types';
 import { MAPS, MAP_CHOICES } from '../content/maps/index';
 import { winsFor, bonusDepthFor } from './profile';
+import { SOUND } from '../audio/sound';
 
 export interface GameConfig {
   mapId: string;
@@ -54,6 +55,8 @@ export class Menu {
       b.textContent = mc.label;
       b.dataset.id = mc.id;
       b.addEventListener('click', () => {
+        SOUND.unlock();
+        SOUND.ui('click');
         this.cfg.mapId = mc.id;
         this.sync();
       });
@@ -73,6 +76,8 @@ export class Menu {
         b.innerHTML = `${fc.label}<small>${fc.blurb}</small>${row === '.pf' ? '<em class="wins"></em>' : ''}`;
         b.dataset.id = fc.id;
         b.addEventListener('click', () => {
+          SOUND.unlock();
+          SOUND.ui('click');
           this.cfg[key] = fc.id;
           this.sync();
         });
@@ -88,6 +93,8 @@ export class Menu {
       this.sync();
     });
     el.querySelector('.grow')!.addEventListener('click', () => {
+      SOUND.unlock();
+      SOUND.ui('grow');
       this.hide();
       onStart({ ...this.cfg });
     });

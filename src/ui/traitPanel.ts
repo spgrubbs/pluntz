@@ -1,6 +1,7 @@
 import type { Colony, World } from '../sim/types';
 import { MUTATION_TIMING, mutationDef } from '../content/mutations';
 import { chooseMutation } from '../sim/stats';
+import { SOUND } from '../audio/sound';
 
 /**
  * The evolution panel. Its heart is the mutation draft: when the clock
@@ -79,7 +80,10 @@ export class TraitPanel {
           </div>
           <p>${m.desc}</p>`;
         card.addEventListener('click', () => {
-          if (chooseMutation(world, c.id, id)) this.rebuild();
+          if (chooseMutation(world, c.id, id)) {
+            SOUND.ui('pick');
+            this.rebuild();
+          }
         });
         this.listEl.appendChild(card);
       }
