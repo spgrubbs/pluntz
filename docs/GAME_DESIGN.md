@@ -413,7 +413,7 @@ case). Renders as a web-stain + woven lace threaded under the rock surface with 
 questing tips at the edges; the heart is a buried knot, not a cap. Infection can no longer
 creep into a heart, so Prune always remains a full cure.
 
-### 13.2 Split the fungal identity into real niches
+### 13.2 Split the fungal identity into real niches *(shipped)*
 "One clade that does detritivore + lithovore + parasite" is muddy. Break it into distinct
 factions/sub-clades, each a clean fantasy:
 - **Detritivore** (saprotroph): eats husks/dead matter; thrives in the aftermath of war.
@@ -422,6 +422,21 @@ factions/sub-clades, each a clean fantasy:
 - **Parasite** (e.g. *Cuscuta*-style): cannot stand alone — must infect and drain a living
   host colony; wins from *inside* someone else's empire.
 Current Basidiomycota becomes the **detritivore** anchor; the other two are future factions.
+
+**As shipped:** three distinct clades, five factions total. Basidiomycota stays the
+**detritivore** (mycelium web, husk-eating, dark-boosted, spore infection — unchanged).
+**Lichenes** is the new **lithovore**: a `mode: 'litho'` crust that reuses the coverage-arc
+(`myco`) growth but earns from claimed *bare rock* — `litho{rockRate, richMult}`, double on
+rich rock, wholly independent of light, the Dimming, and death. Slow (half the fungus's
+spread), stone-tough, near-unkillable; wins by claiming and denying ground. **Cuscuta** is
+the new **parasite**: a `mode: 'parasite'` leafless vine that all but cannot photosynthesize
+(leafIncome 0.08) and starves to a nub alone. Its economy is `stepHaustoria` — any rival
+sharing its rock is drained (`parasite{siphonRate, reach, drainDamage}`), energy flowing
+victim→parasite while the wound festers. It stays a minimal thread and flings cheap seed
+pods to colonize the next occupied rock: it wins from *inside* another clade's garden.
+Each new clade has a full 3-draft mutation set (Lichenes: Crust Creep, Mineral/Rich Veins,
+Stonehide, Bedrock, Lithosphere…; Cuscuta: Gluttony, Questing Seed, Virulent Drink,
+Strangler, Hemophage, Dodder Storm…). Both are player- and AI-selectable in the menu.
 
 ### 13.3 Time-gated Mutations (replaces the always-on trait shop) *(shipped)*
 The current trait tree feels low-impact. Replace/augment it with **Mutations**: every

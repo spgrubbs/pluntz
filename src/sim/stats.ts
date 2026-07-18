@@ -40,6 +40,9 @@ export interface Mods {
   lureCdMult: number; // Perfume: lure cooldown multiplier
   lureDurationMult: number; // Perfume: lure scent lifetime multiplier
   heartRegen: number; // hp/s the heart knits back (Undying Knot)
+  relentless: boolean; // lichen crust spreads even while starving (Lithosphere)
+  siphonMult: number; // Cuscuta: haustoria drink-rate multiplier (Gluttony)
+  parasiteRot: boolean; // Cuscuta: latching also infects the host (Virulent Drink)
 }
 
 export const DEFAULT_MODS: Mods = {
@@ -76,6 +79,9 @@ export const DEFAULT_MODS: Mods = {
   lureCdMult: 1,
   lureDurationMult: 1,
   heartRegen: 0,
+  relentless: false,
+  siphonMult: 1,
+  parasiteRot: false,
 };
 
 export function colonyMods(colony: Colony | undefined): Mods {
@@ -134,6 +140,40 @@ export function colonyMods(colony: Colony | undefined): Mods {
   }
   if (has('farspore')) m.seedRange *= 1.5;
   if (has('undyingknot')) m.heartRegen = 0.6;
+  // lichenes (lithovore) — litho income scales with leafIncome
+  if (has('crustcreep')) m.mycoRateMult *= 1.6;
+  if (has('mineralveins')) m.leafIncome *= 1.3;
+  if (has('richveins')) m.leafIncome *= 1.5;
+  if (has('pioneercrust')) m.seedlingEnergyAdd += 22;
+  if (has('stonehide')) {
+    m.hardenAgeMult *= 0.5;
+    m.hardenBonusAdd += 12;
+    m.contactTaken *= 0.6;
+  }
+  if (has('soredia') || has('dodderstorm')) m.sporeFanAdd += 2;
+  if (has('bedrock')) {
+    m.heartRegen = Math.max(m.heartRegen, 0.6);
+    m.partHp *= 1.3;
+  }
+  if (has('lithosphere')) {
+    m.relentless = true;
+    m.mycoRateMult *= 1.4;
+  }
+  if (has('everstone')) m.contactTaken *= 0.5;
+  // cuscuta (parasite)
+  if (has('gluttony')) m.siphonMult *= 1.7;
+  if (has('questseed')) {
+    m.seedRange *= 1.4;
+    m.windborne = true;
+  }
+  if (has('thornthread')) m.thorns = true;
+  if (has('virulentdrink')) m.parasiteRot = true;
+  if (has('narcoticsap')) m.nectarSleep = true;
+  if (has('perfumepod')) {
+    m.lureCdMult *= 0.5;
+    m.lureDurationMult *= 2;
+  }
+  if (has('hemophage')) m.heartRegen = Math.max(m.heartRegen, 0.7);
   return m;
 }
 

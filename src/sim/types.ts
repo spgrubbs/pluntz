@@ -2,7 +2,12 @@ import type { Vec2 } from './vec';
 import type { RNG } from './rng';
 import type { ShadeLevel } from './light';
 
-export type FactionId = 'pinophyta' | 'anthophyta' | 'basidiomycota';
+export type FactionId =
+  | 'pinophyta'
+  | 'anthophyta'
+  | 'basidiomycota'
+  | 'lichenes' // lithovore: eats bare rock, ignores light and death
+  | 'cuscuta'; // parasite: cannot stand alone, drains a living host colony
 
 export type PartKind = 'heart' | 'root' | 'stem' | 'leaf' | 'cone';
 

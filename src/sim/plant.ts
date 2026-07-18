@@ -252,41 +252,50 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
       mods.leafIncome *
       (blessed ? TUNING.verbs.blessIncomeMult : 1);
   }
-  if (decomp && f.energy.decomp && f.myco && plant.myco) {
-    // The mycelium economy: the underground network digests the rock it has
-    // claimed and every husk lying on it. The dying sun feeds them instead.
-    const D = f.energy.decomp;
+  // The creeping-crust economy, shared by fungus (decomp) and lichen (litho):
+  // a coverage arc that mines the rock it has claimed, then spreads further.
+  if (f.myco && plant.myco) {
     const M = f.myco;
     const r = Math.max(Math.hypot(plant.parts[0].base.x, plant.parts[0].base.y), 1);
     const coverLen = plant.myco.half * 2 * r;
-    const darkBoost = 1 + (1 - world.sunFactor) * 1.2;
-    income += coverLen * M.tricklePerLen * mods.leafIncome * darkBoost;
-    upkeep += coverLen * M.upkeepPerLen;
-    let mouths = 3; // how many husk parts one network digests at once
-    for (const other of world.plants) {
-      if (mouths <= 0) break;
-      if (other.asteroidId !== plant.asteroidId) continue;
-      for (const hp of other.parts) {
-        if (!hp.dead || hp.maxHp <= 0) continue;
-        const bite = Math.min(D.huskRate * mods.huskRateMult * dt, hp.maxHp);
-        hp.maxHp -= bite;
-        income += (bite * D.huskYield) / dt;
-        if (hp.maxHp <= 0) other.version++; // consumed: the husk crumbles away
-        if (--mouths <= 0) break;
+    let mycoIncome = 0;
+    if (decomp && f.energy.decomp) {
+      // detritivore: digest husks + a rock trickle, richer as the sun dies
+      const D = f.energy.decomp;
+      const darkBoost = 1 + (1 - world.sunFactor) * 1.2;
+      mycoIncome += coverLen * M.tricklePerLen * mods.leafIncome * darkBoost;
+      let mouths = 3; // how many husk parts one network digests at once
+      for (const other of world.plants) {
+        if (mouths <= 0) break;
+        if (other.asteroidId !== plant.asteroidId) continue;
+        for (const hp of other.parts) {
+          if (!hp.dead || hp.maxHp <= 0) continue;
+          const bite = Math.min(D.huskRate * mods.huskRateMult * dt, hp.maxHp);
+          hp.maxHp -= bite;
+          mycoIncome += (bite * D.huskYield) / dt;
+          if (hp.maxHp <= 0) other.version++; // consumed: the husk crumbles away
+          if (--mouths <= 0) break;
+        }
       }
+    } else if (f.energy.mode === 'litho' && f.energy.litho) {
+      // lithovore: mine minerals from the claimed bare rock — light and death
+      // are irrelevant; rich rock pays double
+      const L = f.energy.litho;
+      mycoIncome += coverLen * L.rockRate * (asteroid.rich ? L.richMult : 1) * mods.leafIncome;
     }
-    income *= blessed ? TUNING.verbs.blessIncomeMult : 1;
+    upkeep += coverLen * M.upkeepPerLen;
+    income += mycoIncome * (blessed ? TUNING.verbs.blessIncomeMult : 1);
 
-    // spread (or, starving, retreat): the network creeps both ways around
-    // the rock, wrapping the far side given time
-    if (plant.energy > f.energy.reserve && plant.myco.half < Math.PI) {
+    // spread (or, starving, retreat): the crust creeps both ways around the
+    // rock, wrapping the far side given time. Lithosphere spreads regardless.
+    if ((plant.energy > f.energy.reserve || mods.relentless) && plant.myco.half < Math.PI) {
       const dLen = M.spreadLen * mods.mycoRateMult * dt;
       const cost = dLen * M.costPerLen;
-      if (plant.energy - f.energy.reserve > cost) {
+      if (mods.relentless || plant.energy - f.energy.reserve > cost) {
         plant.myco.half = Math.min(Math.PI, plant.myco.half + dLen / r);
-        plant.energy -= cost;
+        plant.energy = Math.max(plant.energy - cost, 0);
       }
-    } else if (plant.energy <= 0) {
+    } else if (plant.energy <= 0 && !mods.relentless) {
       plant.myco.half = Math.max(M.startLen / r, plant.myco.half - (M.retreatLen * dt) / r);
     }
   }

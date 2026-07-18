@@ -13,7 +13,9 @@ export interface GameConfig {
 const FACTION_CHOICES: { id: FactionId; label: string; blurb: string }[] = [
   { id: 'pinophyta', label: '🌲 Pinophyta', blurb: 'patient armored spires · ballistic cones' },
   { id: 'anthophyta', label: '✿ Anthophyta', blurb: 'racing vines · fruit carried by birds' },
-  { id: 'basidiomycota', label: '🍄 Basidiomycota', blurb: 'sunless web · spores infect rivals' },
+  { id: 'basidiomycota', label: '🍄 Basidiomycota', blurb: 'detritivore web · eats husks, spores infect' },
+  { id: 'lichenes', label: '🪨 Lichenes', blurb: 'lithovore crust · eats bare rock, near-unkillable' },
+  { id: 'cuscuta', label: '🩸 Cuscuta', blurb: 'parasite thread · drains living rivals from within' },
 ];
 
 /** The front door: map, factions, seed, GROW. */

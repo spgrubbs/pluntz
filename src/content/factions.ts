@@ -49,10 +49,14 @@ export interface FactionDef {
     priorities: { id: IntentId; text: string }[];
   };
   energy: {
-    /** photo = sunlight through leaves; decomp = eats husks, ignores the sun. */
-    mode: 'photo' | 'decomp';
+    /** photo = sun; decomp = husks; litho = bare rock; parasite = host energy. */
+    mode: 'photo' | 'decomp' | 'litho' | 'parasite';
     /** decomp mode only. */
     decomp?: { huskRate: number; huskYield: number };
+    /** litho mode: income per claimed arc-length, richer on rich rock. */
+    litho?: { rockRate: number; richMult: number };
+    /** parasite mode: energy siphoned per second from a touched rival part. */
+    parasite?: { siphonRate: number; reach: number; drainDamage: number };
     heartInitial: number;
     capBase: number;
     capPerPart: number;
@@ -491,8 +495,261 @@ export const BASIDIOMYCOTA: FactionDef = {
   },
 };
 
+/** LICHENES — the lithovore: a stone-eating crust. Ignores light AND death;
+ * mines minerals straight from bare rock. Slow, relentless, near-unkillable —
+ * it wins by claiming ground and denying it, not by fighting. */
+export const LICHENES: FactionDef = {
+  id: 'lichenes',
+  name: 'Lichenes',
+  render: { leaf: 'gill', heart: 'dome', repro: 'dome' },
+  terms: { leaf: 'lobes', leafOne: 'lobe', cone: 'soralium', trunk: 'thallus' },
+  verbHaste: { bless: 0.75 },
+  myco: {
+    startLen: 30,
+    spreadLen: 0.7, // half the fungus's pace — the crust is patient
+    costPerLen: 0.3,
+    upkeepPerLen: 0.008, // almost free to maintain
+    retreatLen: 1.2,
+    tricklePerLen: 0.02, // unused in litho mode; income comes from litho{}
+  },
+  palettes: [
+    {
+      stem: 0x8fb3a0,
+      stemOld: 0x6d8f7e,
+      leaf: 0x9fc9b0,
+      leafCanopy: 0x84ad97,
+      leafShaded: 0x6f9682,
+      leafStarving: 0xc9b46a,
+      root: 0x7a8f80,
+      heart: 0x6fae90,
+      heartCore: 0xd7ff8a, // sulphur-lichen glow
+      cone: 0xb6d29a,
+      coneArmed: 0xd7ff8a,
+      seed: 0xd2e8a8,
+      litter: 0x46584a, // crust-stain on the stone
+    },
+    {
+      stem: 0xb0a888,
+      stemOld: 0x8f8868,
+      leaf: 0xc9be96,
+      leafCanopy: 0xa89f7a,
+      leafShaded: 0x8a8262,
+      leafStarving: 0xc9b46a,
+      root: 0x8f8870,
+      heart: 0xb0a070,
+      heartCore: 0xffd066,
+      cone: 0xd2c69a,
+      coneArmed: 0xffd066,
+      seed: 0xe8dcae,
+      litter: 0x554e3c,
+    },
+  ],
+  behavior: {
+    summary:
+      'The lithovore crust eats the stone itself. It cares nothing for the ' +
+      'sun or for death — income comes from claimed bare rock (double on ' +
+      'mineral-rich rock), so it thrives where nothing else can and simply ' +
+      'refuses to die. Its price is speed: the thallus creeps at half a ' +
+      'fungus’s pace. Claim ground, deny rooting, and outlast everyone.',
+    priorities: [
+      { id: 'anchor', text: 'Fuse the heart to the stone' },
+      { id: 'trunk', text: 'Creep the thallus over the rock, mining as it goes' },
+      { id: 'cones', text: 'Raise soralia; cast soredia to fresh stone' },
+      { id: 'needles', text: 'Mine minerals from the claimed rock' },
+      { id: 'branches', text: 'Deny rivals every inch of ground' },
+      { id: 'mature', text: 'Endure. Endure. Endure.' },
+    ],
+  },
+  life: {
+    hp: { heart: 70, root: 30, stem: 40, leaf: 12, cone: 16 }, // stone-tough
+    hpVariance: 0.15,
+    starveDps: { leaf: 0.5, stem: 0.2, root: 0.2, heart: 0.5, cone: 0.5 },
+    hardenAge: 40,
+    hardenBonus: 12,
+    leafLifespan: [220, 320],
+    pruneRefund: 0.4,
+  },
+  repro: {
+    style: 'ballistic',
+    sporeFan: 2,
+    coneMax: 2,
+    coneCost: 7,
+    coneEnergy: 30,
+    chargeRate: 1.4, // slow to seed, like everything it does
+    armedAutoFire: 9,
+    aiAutoFire: 4,
+    seedSpeed: 55,
+    seedRange: 460,
+    seedStartEnergy: 34,
+    minSpacing: 52,
+  },
+  energy: {
+    mode: 'litho',
+    litho: { rockRate: 0.024, richMult: 2.1 },
+    heartInitial: 45,
+    capBase: 80,
+    capPerPart: 2,
+    reserve: 4,
+    heartIncome: 0.12,
+    leafIncome: 1,
+    minAngleEff: 0.35,
+    canopyShade: 1,
+    shadeFloor: 1,
+    upkeep: { heart: 0.1, root: 0.03, stem: 0.03, leaf: 0.05, cone: 0.08 },
+  },
+  growth: {
+    style: 'myco',
+    actionCooldown: 0.8,
+    rootMax: 0,
+    rootCost: 4,
+    rootLen: 10,
+    stemCost: 4,
+    leafCost: 4,
+    trunkTarget: 0,
+    trunkSegLen: 6,
+    trunkTaper: 0.03,
+    branchEvery: 3,
+    branchStartDepth: 3,
+    branchAngleDeg: 60,
+    branchSegLen: 5,
+    branchCurl: 0.05,
+    leafLen: 6,
+    leafAngleDeg: 80,
+    leavesPerTrunkStem: 0,
+    leavesPerBranchStem: 0,
+    wPrevDir: 0.35,
+    wUp: 0.06,
+    wSun: 0,
+    wNoise: 0.06,
+    wTangent: 0.45,
+  },
+};
+
+/** CUSCUTA — the parasite (dodder): a leafless orange thread that cannot
+ * feed itself. It must reach a living rival and drink through haustoria;
+ * alone it starves. It wins from inside someone else's empire. */
+export const CUSCUTA: FactionDef = {
+  id: 'cuscuta',
+  name: 'Cuscuta',
+  render: { leaf: 'needle', heart: 'bulb', repro: 'cone' },
+  terms: { leaf: 'haustoria', leafOne: 'haustorium', cone: 'seed pod', trunk: 'runner' },
+  verbHaste: { lure: 0.7 },
+  palettes: [
+    {
+      stem: 0xe8913a, // dodder orange
+      stemOld: 0xc06e26,
+      leaf: 0xffb356,
+      leafCanopy: 0xd88f3e,
+      leafShaded: 0xb0722e,
+      leafStarving: 0x9a5a24,
+      root: 0xb0722e,
+      heart: 0xe87a3a,
+      heartCore: 0xffe06a,
+      cone: 0xffb356,
+      coneArmed: 0xffd06a,
+      seed: 0xffc878,
+      litter: 0x5a3a22,
+    },
+    {
+      stem: 0xd23a6a, // crimson strain
+      stemOld: 0xa02650,
+      leaf: 0xff5688,
+      leafCanopy: 0xd83e6e,
+      leafShaded: 0xb02e56,
+      leafStarving: 0x8a2444,
+      root: 0xb02e56,
+      heart: 0xe83a6a,
+      heartCore: 0xff9ac0,
+      cone: 0xff5688,
+      coneArmed: 0xff9ac0,
+      seed: 0xff78a8,
+      litter: 0x5a2238,
+    },
+  ],
+  behavior: {
+    summary:
+      'A leafless thread that cannot feed itself. Alone, it starves. But let ' +
+      'its runners reach a living rival and it sinks haustoria into their ' +
+      'flesh, drinking their energy straight into its own heart while it ' +
+      'slowly poisons them. It seeds close, hunts hosts, and wins from ' +
+      'inside another clade’s garden — a vine that farms its neighbors.',
+    priorities: [
+      { id: 'anchor', text: 'Grip the rock — briefly' },
+      { id: 'trunk', text: 'Send runners questing for a living host' },
+      { id: 'branches', text: 'Wrap the host; sink haustoria and drink' },
+      { id: 'needles', text: 'Drain every touched rival into the heart' },
+      { id: 'cones', text: 'Pod seeds and fling them at occupied rock' },
+      { id: 'mature', text: 'Bleed the empire from within' },
+    ],
+  },
+  life: {
+    hp: { heart: 44, root: 18, stem: 12, leaf: 8, cone: 12 },
+    hpVariance: 0.2,
+    starveDps: { leaf: 1.4, stem: 0.6, root: 0.6, heart: 1.0, cone: 1.2 },
+    hardenAge: 999, // runners never lignify — they stay grasping
+    hardenBonus: 0,
+    leafLifespan: [120, 200],
+    pruneRefund: 0.4,
+  },
+  repro: {
+    style: 'ballistic',
+    coneMax: 3, // a leech factory: many cheap pods
+    coneCost: 3,
+    coneEnergy: 11,
+    chargeRate: 2.6,
+    armedAutoFire: 6,
+    aiAutoFire: 3,
+    seedSpeed: 72,
+    seedRange: 520, // must reach OTHER rocks — the ones with hosts
+    seedStartEnergy: 26,
+    minSpacing: 34, // roots right up against its victims
+  },
+  energy: {
+    mode: 'parasite',
+    parasite: { siphonRate: 1.35, reach: 40, drainDamage: 0.18 },
+    heartInitial: 40,
+    capBase: 55,
+    capPerPart: 2,
+    reserve: 3,
+    heartIncome: 0.16, // a whisper — enough to quest, never to flourish
+    leafIncome: 0.08, // all but blind: a lone thread withers, a latched one gorges
+    minAngleEff: 0.35,
+    canopyShade: 0.6,
+    shadeFloor: 0.2,
+    upkeep: { heart: 0.14, root: 0.04, stem: 0.05, leaf: 0.06, cone: 0.1 },
+  },
+  growth: {
+    style: 'vine',
+    actionCooldown: 0.34, // fast, grasping growth
+    rootMax: 1,
+    rootCost: 3,
+    rootLen: 10,
+    stemCost: 4,
+    leafCost: 3,
+    trunkTarget: 7, // a minimal thread — the seeds are the weapon, not the body
+    trunkSegLen: 8,
+    trunkTaper: 0.04,
+    branchEvery: 2,
+    branchStartDepth: 2,
+    branchAngleDeg: 80,
+    branchSegLen: 8,
+    branchCurl: 0.08,
+    leafLen: 5,
+    leafAngleDeg: 80,
+    leavesPerTrunkStem: 1,
+    leavesPerBranchStem: 1,
+    wPrevDir: 0.4,
+    wUp: 0.1,
+    wSun: 0.05,
+    wNoise: 0.05,
+    wTangent: 0.4,
+  },
+};
+
 export const FACTIONS: Record<FactionId, FactionDef> = {
   pinophyta: PINOPHYTA,
   anthophyta: ANTHOPHYTA,
   basidiomycota: BASIDIOMYCOTA,
+  lichenes: LICHENES,
+  cuscuta: CUSCUTA,
 };

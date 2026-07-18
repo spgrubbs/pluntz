@@ -163,7 +163,13 @@ export function placeLure(world: World, colonyId: number, pos: Vec2): boolean {
 }
 
 const FAUNA_SPEED = { frugivora: 95, phytophaga: 55, anthophila: 70, scarabaeidae: 42, araneae: 130, lampyridae: 60 };
-const GRAZE_APPEAL = { anthophyta: 3, pinophyta: 0.4, basidiomycota: 0.1 } as const;
+const GRAZE_APPEAL: Record<FactionId, number> = {
+  anthophyta: 3,
+  pinophyta: 0.4,
+  basidiomycota: 0.1,
+  lichenes: 0.05, // stone crust: barely food
+  cuscuta: 1.2, // succulent parasite threads — grazers do nibble them
+};
 
 function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: number): void {
   const want = scale(norm(sub(target, fn.pos)), speed);
@@ -1004,7 +1010,10 @@ export function stepWorld(world: World, dt: number): void {
   stepSeeds(world, dt);
   stepDebris(world, dt);
   stepFauna(world, dt);
-  if (world.tick % 5 === 0) applyContactDamage(world, dt * 5);
+  if (world.tick % 5 === 0) {
+    applyContactDamage(world, dt * 5);
+    stepHaustoria(world, dt * 5);
+  }
   stepDeaths(world);
   if (world.dimming && world.roundState === 'playing') {
     world.dimming.x += world.dimming.speed * dt; // the darkness never rests
@@ -1014,6 +1023,54 @@ export function stepWorld(world: World, dt: number): void {
     stepVanguard(world, dt * 10);
     stepMutations(world);
     checkRoundEnd(world);
+  }
+}
+
+/**
+ * Cuscuta's haustoria: a parasite runner touching a rival plant's part sinks
+ * in and drinks — energy flows from victim to parasite, and the wound bleeds
+ * slowly. This IS the parasite's economy; alone on a rock it starves.
+ */
+function stepHaustoria(world: World, dt: number): void {
+  for (const para of world.plants) {
+    if (!para.alive || FACTIONS[para.faction].energy.mode !== 'parasite') continue;
+    const P = FACTIONS[para.faction].energy.parasite!;
+    const pmods = colonyMods(world.colonies.find((c) => c.id === para.colonyId));
+    for (const host of world.plants) {
+      if (!host.alive || host.colonyId === para.colonyId) continue;
+      // the runners reach any rival sharing the parasite's rock (a small world
+      // — threads get everywhere); a neighbouring rock only if very close.
+      const sameRock = host.asteroidId === para.asteroidId;
+      if (!sameRock && dist(para.astPos, host.astPos) > host.parts.length + P.reach + 40) continue;
+      if (!sameRock) {
+        let near = false;
+        for (const pp of para.parts) {
+          if (pp.dead || pp.kind === 'root' || pp.kind === 'cone') continue;
+          const tip = add(para.astPos, pp.tip);
+          for (const hp of host.parts) {
+            if (hp.dead || hp.kind === 'root') continue;
+            if (dist(tip, add(host.astPos, hp.tip)) < P.reach) {
+              near = true;
+              break;
+            }
+          }
+          if (near) break;
+        }
+        if (!near) continue;
+      }
+      // drink: energy the host can't refuse, capped by what it has
+      const drink = Math.min(P.siphonRate * pmods.siphonMult * dt, host.energy);
+      host.energy -= drink;
+      para.energy = Math.min(para.energy + drink, para.capacity);
+      const wound = host.parts.findIndex((q) => !q.dead && q.kind !== 'root' && q.kind !== 'heart');
+      if (wound >= 0) {
+        damagePart(host, wound, P.drainDamage * dt);
+        // Virulent Drink: the latch also seeds a spreading rot in the host
+        if (pmods.parasiteRot && host.alive && host.parts[wound] && !host.parts[wound].dead) {
+          host.parts[wound].infectedBy = para.colonyId;
+        }
+      }
+    }
   }
 }
 

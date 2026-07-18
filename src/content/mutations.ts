@@ -211,6 +211,130 @@ export const MUTATIONS: Record<FactionId, MutationDef[]> = {
       desc: 'The buried heart knits itself back together, regenerating slowly forever.',
     },
   ],
+  lichenes: [
+    // draft 1
+    {
+      id: 'crustcreep',
+      name: 'Crust Creep',
+      tier: 1,
+      desc: 'The thallus creeps over the rock 60% faster.',
+    },
+    {
+      id: 'mineralveins',
+      name: 'Mineral Veins',
+      tier: 1,
+      desc: 'Every claimed inch of stone yields 30% more energy.',
+    },
+    {
+      id: 'pioneercrust',
+      name: 'Pioneer Crust',
+      tier: 1,
+      bonus: true,
+      desc: 'New crusts wake with a deep mineral reserve (+22 starting energy).',
+    },
+    // draft 2
+    {
+      id: 'stonehide',
+      name: 'Stonehide',
+      tier: 2,
+      desc: 'Fused to armor: parts harden at half the age with +12 hp, contact damage taken −40%.',
+    },
+    {
+      id: 'soredia',
+      name: 'Soredia',
+      tier: 2,
+      desc: 'Each soralium bursts with two extra soredia in a wider fan.',
+    },
+    {
+      id: 'richveins',
+      name: 'Rich Veins',
+      tier: 2,
+      bonus: true,
+      desc: 'The crust floods with energy: +50% income from all claimed rock.',
+    },
+    // draft 3
+    {
+      id: 'bedrock',
+      name: 'Bedrock',
+      tier: 3,
+      desc: 'The heart re-fuses to the stone forever, healing itself; all parts +30% hp.',
+    },
+    {
+      id: 'lithosphere',
+      name: 'Lithosphere',
+      tier: 3,
+      desc: 'The crust never retreats and keeps spreading even while starving (+40% pace).',
+    },
+    {
+      id: 'everstone',
+      name: 'Everstone',
+      tier: 3,
+      bonus: true,
+      desc: 'Nothing chips the crust: contact damage taken cut in half again.',
+    },
+  ],
+  cuscuta: [
+    // draft 1
+    {
+      id: 'gluttony',
+      name: 'Gluttony',
+      tier: 1,
+      desc: 'Haustoria drink 70% faster — bleed a host dry in moments.',
+    },
+    {
+      id: 'questseed',
+      name: 'Questing Seed',
+      tier: 1,
+      desc: 'Seeds fly 40% farther and curve toward occupied rock — toward hosts.',
+    },
+    {
+      id: 'thornthread',
+      name: 'Thorn Thread',
+      tier: 1,
+      bonus: true,
+      desc: 'Grazers that bite the runners bleed — enough bites kill.',
+    },
+    // draft 2
+    {
+      id: 'virulentdrink',
+      name: 'Virulent Drink',
+      tier: 2,
+      desc: 'Latching also rots the host: the wound festers and spreads part to part.',
+    },
+    {
+      id: 'narcoticsap',
+      name: 'Narcotic Sap',
+      tier: 2,
+      desc: 'Drugged threads: grazers tire and wander off 2.5× faster.',
+    },
+    {
+      id: 'perfumepod',
+      name: 'Perfume Pod',
+      tier: 2,
+      bonus: true,
+      desc: 'Your Lure recharges in half the time and its scent lingers twice as long.',
+    },
+    // draft 3
+    {
+      id: 'strangler',
+      name: 'Strangler',
+      tier: 3,
+      desc: 'Runners crush the host: overgrowth contact deals 2.5× damage and siphons energy.',
+    },
+    {
+      id: 'hemophage',
+      name: 'Hemophage',
+      tier: 3,
+      desc: 'Stolen blood knits your own wounds shut — the heart regenerates as you drink.',
+    },
+    {
+      id: 'dodderstorm',
+      name: 'Dodder Storm',
+      tier: 3,
+      bonus: true,
+      desc: 'Pods burst in a fan — fling seeds across a whole empire at once.',
+    },
+  ],
 };
 
 /** AI colonies pick the earliest of these present in a draft. */
@@ -247,6 +371,28 @@ export const AI_MUTATION_PREF: Record<FactionId, string[]> = {
     'puppetbloom',
     'undyingknot',
     'necrosis',
+  ],
+  lichenes: [
+    'mineralveins',
+    'crustcreep',
+    'pioneercrust',
+    'stonehide',
+    'richveins',
+    'soredia',
+    'bedrock',
+    'everstone',
+    'lithosphere',
+  ],
+  cuscuta: [
+    'gluttony',
+    'questseed',
+    'thornthread',
+    'virulentdrink',
+    'perfumepod',
+    'narcoticsap',
+    'strangler',
+    'hemophage',
+    'dodderstorm',
   ],
 };
 
