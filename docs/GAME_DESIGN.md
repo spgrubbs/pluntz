@@ -597,11 +597,98 @@ scripted cutscenes.
 
 ---
 
-*Current state: M0–M9 + M9.1 + §13.1 mycelium + §13.3 mutations (reworked into three
-2-card drafts; wins add a third card to drafts 1..N) + §13.4 fauna (Scarabaeidae,
-Araneae with web-capture, Lampyridae lanterns, universal Lure) + §13.5 per-map fog
-(grey pall). Economy: essence removed — verbs run on per-clade cooldowns. Pace halved;
-speed is a player control. Procedural music + SFX + UI sound shipped, now war-dynamic
-(tempo/drums/aggression scale with battle intensity). Long Road region I (Shadow Canyon)
-shipped with the Dimming + vanguard systems. Next candidates: §13.2 (fungal identity
-split), Long Road regions II+ (§14), M10 Android wrap.*
+## 16. Faction Proposals — for review *(design; pick which to build)*
+
+Five factions ship today: **Pinophyta** (photo-spire), **Anthophyta** (photo-vine +
+fauna), **Basidiomycota** (detritivore), **Lichenes** (lithovore), **Cuscuta** (parasite).
+Below are candidate additions, each filling a *mechanical* niche none of the five occupy.
+Ranked by how novel-and-buildable they are. Each lists its fantasy, its one core new
+mechanic (and how it reuses existing systems), and a full 3-draft mutation sketch
+(2 base cards + 1 win-unlocked bonus per draft, matching the current structure).
+
+### 16.1 Droseraceae — the Carnivore (sundew) ★ recommended next
+**Fantasy:** a glistening trap-plant that doesn't chase the light — it chases *meat*.
+It lures fauna in and digests them alive. The Lure verb becomes its dinner bell.
+**Core mechanic:** its leaves are sticky **traps**. Fauna that wander (or are lured)
+within reach get snared and slowly digested — fauna HP drains into the plant's energy,
+then the corpse is consumed. Photosynthesis is weak; fauna are the food. *Reuse:* the
+Araneae web-capture/reel code almost verbatim (plant-as-trapper instead of spider), the
+Lure system (its whole game), and fauna hp/respawn. New: `Fauna.trappedBy` + a trap pass.
+**Why it's great:** turns the neutral ecology into a food web the player farms; the most
+distinct economy left; leans on systems that already exist.
+**Mutations —** D1: *Sweet Mucilage* (traps reach farther, hold stronger) · *Pitcher*
+(one big trap that briefly holds even a Scarabaeidae) · ★*Fatal Nectar* (snared fauna die
+2× faster). D2: *Digestive Bloom* (each kill bursts energy + a free seed) · *Snapfast*
+(traps close instantly — small bugs never escape) · ★*Scent Glands* (you emit a constant
+free Lure — you ARE the bait). D3: *Man-Eater* (traps also seize rival guardian-fauna:
+spiders, allied swarms) · *Carrion Bloom* (dead fauna anywhere on your rock feed you like
+a detritivore) · ★*Living Snare* (the plant slowly drags its traps toward nearby prey).
+
+### 16.2 Crassulaceae — the Succulent (battery / burst)
+**Fantasy:** a fat water-hoarder that sips by day and unleashes by night. Unkillable in
+drought, terrifying in bursts. The survivor of dying-sun and Dimming maps.
+**Core mechanic:** enormous **storage** (×3–5 capacity) + CAM metabolism (income barely
+cares about sun angle or shade, upkeep is tiny). It banks vast reserves and can **dump**
+them — a "supernova bloom" that spends the whole battery on one explosive seed volley, or
+simply outlasts total darkness on stored charge. *Reuse:* almost pure tuning (capBase,
+upkeep, minAngleEff) + one burst-reproduction action. The cheapest to build.
+**Mutations —** D1: *Deep Cistern* (+capacity) · *CAM* (income ignores sun angle) ·
+★*Waxen Skin* (contact + graze resistance). D2: *Cladode Drop* (pruned parts become
+seeds — the existing Succulence) · *Cold Bloom* (income rises as the sun dims, like fungus)
+· ★*Bezoar* (survives minutes of total darkness on reserves alone). D3: *Supernova Bloom*
+(dump the full reserve into a massive seed/spore volley) · *Ironpetal* (near-unkillable) ·
+★*Perennial* (heart regenerates; never truly starves out).
+
+### 16.3 Pteridophyta — the Fern (swarm / r-strategist)
+**Fantasy:** fragile, fast, endless. Blankets everything in spore clouds, dies at a touch,
+but there is always more. The "zerg."
+**Core mechanic:** **spore-cloud sprawl** — very cheap, very fast growth; frequent wide
+spore bursts; short lifespans; thrives in shade and in the aftermath of war. Individually
+weak (low hp, dies easily) but overwhelming in number. *Reuse:* pure tuning of the existing
+growth/repro (fast cooldown, cheap parts, low hp, huge sporeFan, short leaf lifespans) +
+maybe a periodic auto "spore storm." Easy.
+**Mutations —** D1: *Prothallus* (seeds sprout instantly, half cost) · *Sori Storm* (giant
+spore fans) · ★*Fireweed* (first to colonise dimmed/burned ground, huge income there).
+D2: *Fiddlehead Rush* (grows twice as fast) · *Rhizome* (spreads to adjacent claimed ground
+underground) · ★*Clonal Mat* (a killed fern reseeds itself once, free). D3: *Spore Bloom*
+(continuous ambient spore rain over a whole region) · *Pioneer* (thrives on bare fresh rock
+no one holds) · ★*Bracken Wall* (dense growth that physically walls rivals off a rock).
+
+### 16.4 Formica-clade — the Domesticator (mutualist) *(ambitious)*
+**Fantasy:** a plant that farms the fauna as an army. Its fruit doesn't just feed birds —
+it *tames* them into guardians that hunt your rivals.
+**Core mechanic:** fauna that eat its fruit become **allied** to your colony for a time —
+they defend your gardens and attack rival plants and rival-allied fauna. It turns the
+neutral ecology into your military; the Lure becomes a strike-order. *Reuse:* fauna combat
+already exists (grazer bites, spider hunts) — add `Fauna.allegiance` + a "attack rival" AI
+branch. Higher effort, but no faction touches fauna alliance yet.
+**Mutations —** D1: *Extrafloral Nectar* (allies stay loyal longer) · *War Fruit* (allied
+fauna hit harder) · ★*Domatia* (a permanent resident guardian, a friendly spider). D2:
+*Aphid Farm* (allied fauna passively generate energy for you) · *Swarm Call* (your Lure
+orders allies to strike a point) · ★*Pheromone* (rivals' fauna defect to you). D3: *Hive
+Bloom* (breed your own fauna from pods) · *Warden* (allies guard the vanguard threshold) ·
+★*Queen* (a super-guardian that clears a rock).
+
+### 16.5 Cyanophyta — the Terraformer (map-changer) *(support/economy)*
+**Fantasy:** makes dead rock livable, then hands off. A slow enabler that rewrites the
+board and lifts everything friendly around it.
+**Core mechanic:** its crust slowly converts plain rock it claims into **rich rock**
+(nitrogen-fixing) — a *permanent map change* — and boosts adjacent friendly gardens.
+A support/economy clade that alters terrain rather than fighting. *Reuse:* lithovore-style
+coverage + flip `Asteroid.rich` under full coverage (needs a hash mix). Novel because it
+mutates the map itself; weakest as a solo faction, best in a co-op/campaign frame.
+
+**Recommendation:** build **16.1 Droseraceae** next — it's the most distinct fantasy, it
+makes the fauna/Lure systems sing, and it reuses the spider capture code. **16.2
+Crassulaceae** is the cheapest win (mostly tuning) and shines on the Long Road's dying-sun
+regions. The others are strong but heavier lifts.
+
+---
+
+*Current state: M0–M9 + M9.1 + §13.1 mycelium + §13.2 fungal-identity split (5 factions:
+Lichenes lithovore + Cuscuta parasite added) + §13.3 mutations (three 2-card drafts; wins
+add a third card) + §13.4 fauna (Scarabaeidae, Araneae web-capture, Lampyridae, universal
+Lure) + §13.5 per-map fog. Economy: essence removed — verbs on per-clade cooldowns. Pace
+halved; player speed control. Procedural war-dynamic music + SFX + UI sound. Long Road
+region I (Shadow Canyon) shipped with the Dimming + vanguard. Next candidates: §16 new
+factions (Droseraceae recommended), Long Road regions II+ (§14), M10 Android wrap.*
