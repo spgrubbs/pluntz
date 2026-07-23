@@ -597,6 +597,225 @@ scripted cutscenes.
 
 ---
 
+## 15. The Drift — follow-the-propagule exploration mode *(design; refine → implement next)*
+
+**The pitch:** one seed, one camera, one endless sky. The Drift is Pluntz's open-world
+mode: instead of shepherding a whole board from above, you live *inside* a single lineage
+— the camera rides your current plant, and when it's time to move on you launch a special
+seed and *go with it*, sailing over fogged space toward whatever glints out there. Every
+garden you leave behind keeps living without you, feeding the lineage that left it.
+It is Reassembly's "fly toward the strange light" fantasy re-expressed as plant
+propagation: you don't pilot a ship, you *are* the dispersal.
+
+This mode reuses nearly everything already shipped — fog, fauna ferries, mutations,
+the autonomy sim — and rearranges it around one new camera rule and one new economy.
+
+### 15.1 The three-body loop
+
+The mode alternates between three states, each with its own feel:
+
+1. **Rooted (the garden window).** The camera is tethered to your **Heir** — the one
+   plant that carries the lineage. You see its rock and a modest halo of revealed space
+   around it (fog everywhere else). You play Pluntz as normal here: verbs, growth,
+   defense, watching. But the window is *small* — the world is always visibly bigger
+   than what you know.
+2. **In flight (the voyage).** You charge and launch the **Heir Seed** — and the camera
+   goes WITH it. For ten to sixty seconds you are a seed: drifting past unknown rocks,
+   through debris fields, over the light of feral gardens, fog peeling open in a narrow
+   corridor around you. This is the mode's signature screen. Flight is mostly ballistic
+   (aim well!), but mutations buy you agency mid-air (§15.4).
+3. **Founding (the landfall).** The seed roots; a new Heir sprouts; the camera settles
+   onto it. The *previous* garden — everything you built before — **retires into a
+   Legacy garden** (§15.3): autonomous, off-camera, and now generating the resource that
+   pays for your next mutations. The loop closes: every launch converts your past into
+   fuel for your future.
+
+The rhythm is deliberately breathing: tense rooted chapters (grow, survive, prepare)
+punctuated by exhilarating flights (commit, drift, discover). The Long Road's leapfrog
+rhythm, but *chosen* — no Dimming at your heels unless you wander into one.
+
+### 15.2 The Heir Seed (the camera's body)
+
+- **A verb, not an event.** `launchHeir` joins the verb tray in this mode. It is charged
+  deliberately: the Heir plant grows a visibly special cone (bigger, brighter, slow —
+  ~30–60s of colony energy investment), then you aim and fire like an artillery shot.
+  Aiming shows a faded trajectory arc *through the fog* — you can see where you'll go,
+  not what's there. That gap is the mode.
+- **The camera rides it.** From ignition to rooting, the camera is glued to the seed
+  (the existing `Lerper` makes this buttery for free). Zoom eases out slightly during
+  flight so you read the space sliding past.
+- **It reveals as it flies.** The seed carries a fog-reveal radius (like carried seeds
+  already do in `FogView`) — a torchbeam corridor opens along its path and *stays
+  revealed* (the Drift's fog remembers: explored space accumulates on a persistent mask,
+  which is what makes it feel like mapping a world rather than defogging a level).
+- **It can ride things.** All the ferry logic already exists: an Heir Seed that lands on
+  drifting debris (`Seed.riding`) or hops onto a passing Scarabaeidae
+  (`Seed.ridingFauna`) keeps the camera with it — suddenly you're a passenger on a
+  stone beetle wandering the dark, deciding when to hop off. Long-distance travel
+  *wants* to be multi-modal: launch → catch debris current → transfer to scarab → land.
+- **Failure is survivable but real.** A seed that fizzles (lands on hostile crust, gets
+  eaten, drifts out of juice) triggers succession (§15.6) — you fall back to the lineage,
+  you don't game-over.
+
+### 15.3 Legacy gardens (retiring the past into income)
+
+When the Heir roots somewhere new, the old garden **seals**:
+
+- It keeps living **fully autonomously** — no verbs reach it, no camera visits required
+  (you *can* pan back along revealed space to look; you can't touch). It defends itself,
+  breeds, ages. Pillar #1 (autonomy) is what makes this credible: the sim already runs
+  gardens without you.
+- It generates **Legacy** — the Drift's only meta-resource — as a slow trickle
+  proportional to its *health at a glance* (living biomass, energy surplus). A thriving
+  sealed garden drips steadily; a besieged one sputters; a dead one stops (but see
+  §15.6 — even dead gardens leave one ember).
+- **Perf/sim note:** gardens far outside the active window get frozen into an **amber
+  snapshot** — their Legacy rate is sampled and fixed, plants stop simulating until the
+  camera returns. Bounded sim cost no matter how far you roam; deterministic
+  (snapshot/wake are pure world-state functions, hashable like everything else).
+- **Design intent:** this makes expansion *feel* like propagation rather than conquest.
+  You aren't abandoning your colony — you're becoming its next generation, and it is
+  literally feeding you forward. The more gardens you successfully seed, the richer your
+  lineage's mutation budget. Greed has a shape: seal too early and the garden is weak
+  (poor trickle, may die); linger too long and you're playing a base game, not exploring.
+
+### 15.4 Mutation-on-demand (the Legacy catalog)
+
+The timed three-draft system stays in skirmish/Long Road untouched. The Drift replaces
+it with **spending Legacy whenever you want** at the Heir — mutation as *outfitting*,
+like buying ship parts in Reassembly:
+
+- Open the lineage panel any time you're Rooted; every affordable card is purchasable
+  immediately. Costs scale with how many you already own (soft exponential), so early
+  cards are impulse buys and late cards are expedition goals.
+- The catalog is organized into four **strands**, tuned for exploration rather than
+  war (existing skirmish mutations slot in alongside these):
+  - **Mobility** — *Longshot* (launch range ↑), *Tendril Vanes* (mid-flight steering:
+    2–3 nudge impulses per flight, player-triggered), *Drift Sail* (ride debris
+    currents; slow but infinite range), *Beetleback* (scarabs actively come catch your
+    Heir Seed), *Serotinous Kick* (bounce off a rock once instead of rooting — a
+    skip-stone).
+  - **Protection** — *Stone Coat* (seed armor: survives fauna bites, hostile-crust
+    landings), *Thornsheath* (grazers regret it), *Decoy Husk* (launch spits a fake
+    that draws spiders' webs), *Ember Heart* (the Heir plant's heart regenerates).
+  - **Sensing** — *Wide Eye* (bigger reveal radius rooted and in flight), *Rumor Root*
+    (periodic pings mark the *direction* of the nearest undiscovered anomaly — the
+    fog-glint system, made a stat), *Lightsight* (see feral gardens' glow through fog
+    at long range), *Star Chart* (revealed fog never regrows blotches; minimap earned,
+    not given).
+  - **Colonization** — *Pioneer Root* (root on crusted/hostile/poor surfaces), *Quick
+    Dome* (new gardens establish 2× faster — shrinks the vulnerable landfall window),
+    *Rich Vein* (new gardens' Legacy trickle ↑), *Twin Heir* (launch two seeds, camera
+    follows the lead one, the second is a free backup colony).
+- **Mutations ride the seed.** The whole loadout travels with the Heir — the lineage
+  is the build. This is why retiring gardens feels fine: the *plants* stay behind, the
+  *biology* comes with you.
+- Implementation note: `chooseMutation` and the `Mods` pipeline already do all of this
+  — the only new machinery is a Legacy wallet on the player colony, purchase-anytime UI
+  (the draft panel reskinned as a shop), and ~10 new mod hooks (steering impulses, seed
+  armor, reveal radius, legacy rate). AI/feral colonies keep using the timed-draft path.
+
+### 15.5 Changing clades mid-journey (grafting)
+
+Faction transition is real but **earned at places, not bought from menus** — it's a
+reason to explore, not a dropdown:
+
+- **Seed-Vault Husks** (a rare anomaly, §15.7) hold the dormant germ of another clade.
+  Reaching one lets you **graft**: your *next* Heir Seed hatches as the new faction.
+  Your Legacy income, revealed map, and gardens all persist — the lineage continues,
+  the biology pivots. Strand mutations (Mobility/Sensing/etc.) carry over; clade-specific
+  ones (e.g. Serotiny) convert into a Legacy refund.
+- **Old gardens keep their old clade.** After grafting Cuscuta from a Pinophyta line,
+  your past is still pine forests — now *hosts you could come back and drink from*.
+  Cross-clade lineage play emerges free from existing systems (the parasite economy,
+  detritivore feasting on your own dead gardens, lichen prepping rock for grafted
+  photosynthesizers).
+- **Why it fits the fantasy:** real dispersal is opportunistic; the mode's story is
+  "one life-line adapting to what it finds." Deep biome bands (§15.7) are *designed*
+  to be hostile to your starting clade so a found vault reads as salvation.
+
+### 15.6 Death & succession (the lineage never quite ends)
+
+- If the Heir dies (or an Heir Seed is destroyed in flight), the camera falls back along
+  the lineage to the **newest surviving Legacy garden**, which *wakes* (returns to full
+  sim + verbs) and grows a new Heir cone. You've lost ground, not the run — the walk
+  back out is the punishment, and re-crossing known space is fast because it's revealed
+  and often still yours.
+- If **every** garden is dead, the very first rock keeps a **Firstseed ember** — one
+  free respawn at home with all mutations intact (Legacy wallet zeroed). The Drift is a
+  sandbox with teeth, not a roguelike; the fail state is "start the map again from home,
+  wiser," never "delete the save."
+
+### 15.7 What's out there (the world worth flying into)
+
+The Deep Field map from the exploration proposal is the Drift's home: one huge
+(~10,000 × 8,000+) generated, fully-fogged space, structured as **directional biome
+bands** so that *direction is a decision* — ice belt north (dim, Lampyridae swarms,
+lichen heaven), debris alley east (ferry superhighway, spider dens), fungal deadlands
+down-spin (husk fields, spore storms), rich core worlds guarded by the strongest feral
+colonies. Scattered through it:
+
+- **Feral colonies** — AI colonies of all five clades with pre-stacked mutation
+  loadouts scaling with distance from home (just `colony.mutations` pushed at worldgen).
+  Near ones are neighbors; far ones are apex gardens worth planning expeditions against.
+- **Anomalies** (each one a hand-authored configuration of live mechanics, like Long
+  Road regions): the *Great Bloom* derelict (free mutation), *Seed-Vault Husks*
+  (grafting, §15.5), the *Lantern Grove* (tame Lampyridae light in a dark band), a
+  *wormhole pair* (instant seed transit — late-game highway), the *Sleeper* (§14.2,
+  now optional and findable). Discovering any anomaly grants Legacy — curiosity is
+  income.
+- **Rumor signals** — through-fog hints that give flight a heading: faint glints,
+  drifting spore-haze, a directional shimmer in the music (the audio system's mood
+  channel, aimed). Sensing mutations sharpen them.
+- **Optional terminus:** the oldest rumor points somewhere — the **First Garden**, far
+  in the richest, deadliest band. Reaching and rooting it is the Drift's "ending"
+  (per-clade completion unlocks, like the Long Road's). But the mode is a sandbox
+  first; the terminus is a horizon, not a timer.
+
+### 15.8 Open design questions (for the refinement pass)
+
+1. **Seal timing:** does the old garden retire when the Heir Seed *launches* (braver,
+   cleaner camera story — the launch is a goodbye) or when it *roots* (safer — a failed
+   flight falls back to a still-active garden)? Current lean: **on rooting**, with
+   succession (§15.6) covering failed flights; revisit if lingering feels too safe.
+2. **Verb reach:** rooted verbs (lure/ping/bless/prune) affect only the active window
+   around the Heir? Current lean: yes — the shepherd's voice is local; Legacy gardens
+   are truly on their own.
+3. **Legacy trickle vs. lump:** continuous drip (feels alive, encourages many gardens)
+   vs. one-time "inheritance" payout at sealing (cleaner, snapshot-friendly)? Current
+   lean: **small lump + drip**, drip frozen by the amber snapshot anyway.
+4. **Steering feel:** nudge-impulse charges (deterministic, replayable, mobile-friendly
+   taps) vs. continuous tilt-steering? Current lean: impulses — they're discrete player
+   events like verbs, so determinism and the input-recording model survive untouched.
+5. **How much combat follows you:** do feral colonies ever counter-expand toward your
+   gardens, or is threat purely where you fly? Lean: near-band ferals stay put;
+   deep-band apex gardens send seeds back along your revealed corridor. The world
+   should eventually answer your intrusion.
+
+### 15.9 Build plan (phased so each step is playable)
+
+- **Phase A — the camera is a seed** *(small)*: camera-tether to Heir + `launchHeir`
+  verb + follow-flight + retire-to-autonomous on an existing skirmish map, no fog.
+  Proves the core feel in an afternoon of play. New sim surface: a `heirPlantId` /
+  `heirSeedId` on the player colony; camera reads it. (`Lerper` already smooths it.)
+- **Phase B — Legacy + the shop** *(small-medium)*: Legacy wallet + trickle + amber
+  snapshot; draft panel gains a purchase-anytime mode; first ~8 strand mutations
+  (Longshot, Tendril Vanes, Stone Coat, Wide Eye, Pioneer Root, Quick Dome, Rich Vein,
+  Twin Heir) — mostly existing mod hooks.
+- **Phase C — the Deep Field** *(medium)*: big banded `generateDeepField` map; persistent
+  fog-reveal mask; seed-torchbeam reveal; feral colonies with distance-scaled loadouts.
+  This is the moment the mode becomes *the mode*.
+- **Phase D — things to find** *(medium, content-driven)*: anomalies (Great Bloom,
+  Seed Vault + grafting, Lantern Grove, wormhole pair), rumor signals, discovery Legacy,
+  the First Garden terminus.
+- **Phase E — polish the fantasy** *(ongoing)*: flight audio (wind-through-fog quiet →
+  landfall swell), succession flow, Star Chart minimap, deep-band counter-expansion.
+
+Phases A+B ship a complete playable loop on existing maps; C makes it exploration;
+D makes it Reassembly.
+
+---
+
 ## 16. Faction Proposals — for review *(design; pick which to build)*
 
 Five factions ship today: **Pinophyta** (photo-spire), **Anthophyta** (photo-vine +
@@ -690,5 +909,8 @@ Lichenes lithovore + Cuscuta parasite added) + §13.3 mutations (three 2-card dr
 add a third card) + §13.4 fauna (Scarabaeidae, Araneae web-capture, Lampyridae, universal
 Lure) + §13.5 per-map fog. Economy: essence removed — verbs on per-clade cooldowns. Pace
 halved; player speed control. Procedural war-dynamic music + SFX + UI sound. Long Road
-region I (Shadow Canyon) shipped with the Dimming + vanguard. Next candidates: §16 new
-factions (Droseraceae recommended), Long Road regions II+ (§14), M10 Android wrap.*
+region I (Shadow Canyon) shipped with the Dimming + vanguard. Design queued for build:
+§15 The Drift (follow-the-propagule open-world mode — camera rides an Heir Seed, retired
+gardens become Legacy income, mutate-on-demand, grafting between clades) — refine →
+implement next. Also queued: §16 new factions (Droseraceae recommended), Long Road
+regions II+ (§14), M10 Android wrap.*
