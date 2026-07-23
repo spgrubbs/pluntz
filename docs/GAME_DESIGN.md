@@ -814,6 +814,28 @@ colonies. Scattered through it:
 Phases A+B ship a complete playable loop on existing maps; C makes it exploration;
 D makes it Reassembly.
 
+### 15.10 As shipped — Phases A + B
+
+Phases A and B are live (map **`drift01` · "The Drift"**, a single-lineage sandbox):
+
+- **Camera rides the lineage** (`World.drift`, `Colony.heirPlantId/heirSeedId`). The
+  starting plant is the first Heir; in flight the camera locks to the Heir Seed via the
+  `Lerper`; rooted, it eases toward the Heir's rock and lets you pan.
+- **The `launchHeir` verb** (`⟐ launch`): spends garden energy to fling a bright Heir
+  Seed comet (steer-charge sparks orbiting it); a tap during flight nudges it (Tendril
+  Vanes). It flies 1.6× normal range and can ride debris/scarabs like any seed.
+- **Retirement → Legacy**: on landfall (`foundHeir`) the new plant becomes the Heir and
+  the whole previous garden seals to `legacy` — autonomous, off-camera, trickling
+  Legacy; gardens beyond ~1700u **amber-freeze** (`Plant.frozen` + sampled `legacyRate`)
+  for bounded sim cost. Succession wakes the newest survivor if the Heir dies.
+- **Mutation shop** (`DRIFT_CATALOG`, `buyDriftMutation`): the round chip opens a
+  buy-anytime shop of eight strand cards (Longshot, Tendril Vanes, Twin Heir, Stone
+  Coat, Wide Eye, Pioneer Root, Quick Dome, Rich Vein) with `1.55^owned` cost scaling.
+  Timed drafts still run for AI/skirmish; the player's are replaced by Legacy spend.
+- **Open for the refinement pass:** Legacy trickle rate (currently generous — one hop
+  banks enough for the cheap cards); seal-on-launch vs seal-on-landfall (shipped:
+  landfall); Deep Field worldgen + fog reveal + feral colonies are still Phase C.
+
 ---
 
 ## 16. Faction Proposals — for review *(design; pick which to build)*
@@ -825,7 +847,15 @@ Ranked by how novel-and-buildable they are. Each lists its fantasy, its one core
 mechanic (and how it reuses existing systems), and a full 3-draft mutation sketch
 (2 base cards + 1 win-unlocked bonus per draft, matching the current structure).
 
-### 16.1 Droseraceae — the Carnivore (sundew) ★ recommended next
+### 16.1 Droseraceae — the Carnivore (sundew) ✅ **shipped**
+*Built as the 6th faction: `energy.mode: 'carnivore'`, `Fauna.trappedBy`, a `stepTraps`
+pass (sticky-dew capture, drag-to-mouth, digest-into-energy, size-scaled escape rolls,
+`TRAP_ESCAPE`), weak photosynthesis (`leafIncome 0.55`) so a prey-less garden starves.
+Full 9-card mutation set (Sweet Mucilage · Pitcher · ★Fatal Nectar / Digestive Bloom ·
+Snapfast · ★Scent Glands / Man-Eater · Carrion Bloom · ★Living Snare) wired through
+`Mods`; scarlet dew palette; a glistening trap-strand render on snared fauna. The Lure
+(0.55× cooldown) is its dinner bell exactly as designed.*
+
 **Fantasy:** a glistening trap-plant that doesn't chase the light — it chases *meat*.
 It lures fauna in and digests them alive. The Lure verb becomes its dinner bell.
 **Core mechanic:** its leaves are sticky **traps**. Fauna that wander (or are lured)
@@ -909,8 +939,9 @@ Lichenes lithovore + Cuscuta parasite added) + §13.3 mutations (three 2-card dr
 add a third card) + §13.4 fauna (Scarabaeidae, Araneae web-capture, Lampyridae, universal
 Lure) + §13.5 per-map fog. Economy: essence removed — verbs on per-clade cooldowns. Pace
 halved; player speed control. Procedural war-dynamic music + SFX + UI sound. Long Road
-region I (Shadow Canyon) shipped with the Dimming + vanguard. Design queued for build:
-§15 The Drift (follow-the-propagule open-world mode — camera rides an Heir Seed, retired
-gardens become Legacy income, mutate-on-demand, grafting between clades) — refine →
-implement next. Also queued: §16 new factions (Droseraceae recommended), Long Road
-regions II+ (§14), M10 Android wrap.*
+region I (Shadow Canyon) shipped with the Dimming + vanguard. §15 The Drift Phases A+B
+shipped (map `drift01`: camera rides an Heir Seed, retired gardens become autonomous
+Legacy income, buy-anytime mutation shop) — Phases C+ (Deep Field worldgen, fog reveal,
+feral colonies, grafting, anomalies) queued. §16.1 Droseraceae carnivore shipped as the
+6th faction. Next candidates: Drift Phase C, remaining §16 factions (Crassulaceae
+cheapest), Long Road regions II+ (§14), M10 Android wrap.*

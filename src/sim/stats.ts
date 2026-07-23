@@ -1,5 +1,5 @@
 import type { Colony, Plant, World } from './types';
-import { MUTATION_TIMING } from '../content/mutations';
+import { MUTATION_TIMING, DRIFT_CATALOG, driftCost } from '../content/mutations';
 import { FACTIONS } from '../content/factions';
 import { TUNING } from '../content/tuning';
 import { emit } from './events';
@@ -43,6 +43,22 @@ export interface Mods {
   relentless: boolean; // lichen crust spreads even while starving (Lithosphere)
   siphonMult: number; // Cuscuta: haustoria drink-rate multiplier (Gluttony)
   parasiteRot: boolean; // Cuscuta: latching also infects the host (Virulent Drink)
+  // Droseraceae (carnivore traps)
+  trapReachAdd: number; // extra trap radius
+  trapHoldMult: number; // escape-odds multiplier (<1 holds tighter)
+  digestMult: number; // digestion-rate multiplier
+  trapScarabs: boolean; // traps can seize the biggest fauna
+  killBurst: boolean; // each kill bursts energy + a free seed
+  carnivoreLure: boolean; // the plant draws fauna toward it like a lure
+  livingSnare: boolean; // traps drag struggling prey inward
+  // The Drift (§15) — strand mutations bought with Legacy
+  heirSteers: number; // mid-flight steering nudges granted to an Heir Seed
+  seedArmor: boolean; // Heir Seeds survive fauna bites & hostile landings
+  revealMult: number; // fog-reveal radius multiplier (render-side)
+  pioneerRoot: boolean; // Heir Seeds root even inside rival beds
+  quickDome: boolean; // new gardens establish faster (extra seedling energy)
+  legacyRateMult: number; // retired gardens trickle more Legacy
+  twinHeir: boolean; // launch two Heir Seeds; camera follows the lead
 }
 
 export const DEFAULT_MODS: Mods = {
@@ -82,6 +98,20 @@ export const DEFAULT_MODS: Mods = {
   relentless: false,
   siphonMult: 1,
   parasiteRot: false,
+  trapReachAdd: 0,
+  trapHoldMult: 1,
+  digestMult: 1,
+  trapScarabs: false,
+  killBurst: false,
+  carnivoreLure: false,
+  livingSnare: false,
+  heirSteers: 0,
+  seedArmor: false,
+  revealMult: 1,
+  pioneerRoot: false,
+  quickDome: false,
+  legacyRateMult: 1,
+  twinHeir: false,
 };
 
 export function colonyMods(colony: Colony | undefined): Mods {
@@ -174,6 +204,43 @@ export function colonyMods(colony: Colony | undefined): Mods {
     m.lureDurationMult *= 2;
   }
   if (has('hemophage')) m.heartRegen = Math.max(m.heartRegen, 0.7);
+  // droseraceae (carnivore)
+  if (has('sweetmucilage')) {
+    m.trapReachAdd += 22;
+    m.trapHoldMult *= 0.4;
+  }
+  if (has('pitcher')) m.trapScarabs = true;
+  if (has('fatalnectar')) m.digestMult *= 2;
+  if (has('digestivebloom')) m.killBurst = true;
+  if (has('snapfast')) m.trapHoldMult *= 0.3;
+  if (has('scentglands')) {
+    m.carnivoreLure = true;
+    m.trapReachAdd += 10;
+  }
+  if (has('maneater')) m.trapScarabs = true;
+  if (has('carrionbloom')) {
+    m.trapReachAdd += 26;
+    m.digestMult *= 1.4;
+  }
+  if (has('livingsnare')) {
+    m.livingSnare = true;
+    m.trapReachAdd += 34;
+  }
+  // The Drift (§15) — strand mutations
+  if (has('drift_longshot')) m.seedRange *= 1.7;
+  if (has('drift_vanes')) m.heirSteers += 3;
+  if (has('drift_stonecoat')) {
+    m.seedArmor = true;
+    m.partHp *= 1.15;
+  }
+  if (has('drift_wideeye')) m.revealMult *= 1.6;
+  if (has('drift_pioneer')) m.pioneerRoot = true;
+  if (has('drift_quickdome')) {
+    m.quickDome = true;
+    m.seedlingEnergyAdd += 34;
+  }
+  if (has('drift_richvein')) m.legacyRateMult *= 1.8;
+  if (has('drift_twinheir')) m.twinHeir = true;
   return m;
 }
 
@@ -206,6 +273,35 @@ export function chooseMutation(world: World, colonyId: number, mutationId: strin
   colony.mutations.push(mutationId);
   colony.pendingOffer = null;
   colony.nextMutationAt = world.time + MUTATION_TIMING.interval;
+  return true;
+}
+
+/** The number of Drift shop cards a colony already owns (drives cost scaling). */
+export function driftOwnedCount(colony: Colony): number {
+  return colony.mutations.filter((id) => id.startsWith('drift_')).length;
+}
+
+/** The current Legacy price of a Drift shop card for this colony. */
+export function driftCardCost(colony: Colony, cardId: string): number {
+  const card = DRIFT_CATALOG.find((c) => c.id === cardId);
+  if (!card) return Infinity;
+  return driftCost(card.cost, driftOwnedCount(colony));
+}
+
+/**
+ * The Drift shop: spend Legacy on a strand mutation at any time. The whole
+ * loadout rides the lineage — the plants stay behind, the biology comes with
+ * you. Returns false if unaffordable or already owned.
+ */
+export function buyDriftMutation(world: World, colonyId: number, cardId: string): boolean {
+  const colony = world.colonies.find((c) => c.id === colonyId);
+  if (!colony || colony.mutations.includes(cardId)) return false;
+  const card = DRIFT_CATALOG.find((c) => c.id === cardId);
+  if (!card) return false;
+  const cost = driftCost(card.cost, driftOwnedCount(colony));
+  if (colony.legacy < cost) return false;
+  colony.legacy -= cost;
+  colony.mutations.push(cardId);
   return true;
 }
 

@@ -60,6 +60,7 @@ export function createWorld(map: MapDef, seed: number): World {
     canopyHeldSec: 0,
     canopyShares: [],
     canopyWin: map.canopyWin ?? null,
+    drift: map.drift ?? false,
     dimming: map.dimming ? { x: map.dimming.startX, speed: map.dimming.speed } : null,
     vanguard: null, // resolved to an asteroid id below, once rocks exist
     vanguardHolder: -1,
@@ -87,14 +88,18 @@ export function createWorld(map: MapDef, seed: number): World {
       nextMutationAt: MUTATION_TIMING.firstAt,
       bonusDepth: 0,
       verbReadyAt: { ping: 0, lure: 0, bless: 0, prune: 0 },
+      heirPlantId: -1,
+      heirSeedId: -1,
+      legacy: 0,
     });
   }
   for (const s of map.spawns) {
     const ast = world.asteroids[s.asteroid];
     const colony = world.colonies[s.colony];
-    world.plants.push(
-      createPlant(world, ast, s.anchorDeg * (Math.PI / 180), colony.faction, colony.id),
-    );
+    const plant = createPlant(world, ast, s.anchorDeg * (Math.PI / 180), colony.faction, colony.id);
+    world.plants.push(plant);
+    // The Drift: the starting plant is each lineage's first Heir.
+    if (world.drift && colony.heirPlantId < 0) colony.heirPlantId = plant.id;
   }
   if (map.vanguard) {
     world.vanguard = {
@@ -147,6 +152,7 @@ function spawnFauna(world: World, kind: import('./types').FaunaKind): void {
     satiety: rng.range(0, 0.3),
     wander: rng.range(0, Math.PI * 2),
     webPrey: -1,
+    trappedBy: -1,
     orbit: null,
   });
 }
@@ -169,6 +175,7 @@ const GRAZE_APPEAL: Record<FactionId, number> = {
   basidiomycota: 0.1,
   lichenes: 0.05, // stone crust: barely food
   cuscuta: 1.2, // succulent parasite threads — grazers do nibble them
+  droseraceae: 2.4, // deceptively sweet — grazers wander in and are snared
 };
 
 function steer(fn: { pos: Vec2; vel: Vec2 }, target: Vec2, speed: number, dt: number): void {
@@ -381,6 +388,9 @@ function chooseDeliveryRock(
 function stepFauna(world: World, dt: number): void {
   if (world.lure && world.time > world.lure.expires) world.lure = null;
   for (const fn of world.fauna) {
+    // a snared critter is helpless — the trap step (stepTraps) drags it in;
+    // it takes no AI turn of its own
+    if (fn.trappedBy >= 0) continue;
     switch (fn.kind) {
       case 'frugivora': {
         if (fn.state === 'wander') {
@@ -777,13 +787,14 @@ export function sproutAt(
   faction: FactionId,
   ast: Asteroid,
   angleRad: number,
+  pioneer = false,
 ): boolean {
   const R = FACTIONS[faction].repro;
   const anchor = add(ast.pos, scale(fromAngle(angleRad), ast.radius));
   // spacing rule = territory rule: a seed cannot take root inside any living
   // plant's substrate bed (the visible litter arc), nor closer than the
   // faction's hard minimum. Mature plants therefore guard more ground.
-  if (!canRootAt(world, ast, angleRad, faction)) return false;
+  if (!canRootAt(world, ast, angleRad, faction, pioneer)) return false;
   const plant = createPlant(world, ast, angleRad, faction, colonyId);
   const colony = world.colonies.find((c) => c.id === colonyId);
   plant.energy = R.seedStartEnergy + colonyMods(colony).seedlingEnergyAdd;
@@ -802,8 +813,136 @@ export function setPing(world: World, colonyId: number, pos: Vec2): boolean {
   return true;
 }
 
+/** The Drift (§15): energy an Heir Seed launch costs its garden. */
+const HEIR_COST = 20;
+
+/**
+ * The Drift's launchHeir verb: the current Heir grows a special propagule and
+ * flings it — and the camera will ride it (main.ts follows colony.heirSeedId).
+ * Returns false if there's no Heir with enough energy to launch.
+ */
+export function launchHeir(world: World, colonyId: number, aim: Vec2): boolean {
+  const colony = world.colonies.find((c) => c.id === colonyId);
+  if (!colony) return false;
+  const heir = world.plants.find((p) => p.id === colony.heirPlantId && p.alive);
+  if (!heir || heir.energy < HEIR_COST + FACTIONS[heir.faction].energy.reserve) return false;
+  const mods = colonyMods(colony);
+  const from = add(heir.astPos, heir.parts[0].tip);
+  const dir = norm(sub(aim, from));
+  const R = FACTIONS[heir.faction].repro;
+  const range = R.seedRange * 1.6 * mods.seedRange; // heir propagules fly far
+  heir.energy -= HEIR_COST;
+  const mk = (heirFlag: boolean, steers: number): void => {
+    world.seeds.push({
+      id: world.nextId++,
+      colonyId,
+      faction: heir.faction,
+      pos: { ...from },
+      vel: scale(dir, R.seedSpeed),
+      age: 0,
+      maxAge: range / R.seedSpeed,
+      riding: -1,
+      ridingFauna: -1,
+      ignoreAst: heir.asteroidId,
+      heir: heirFlag,
+      steers,
+    });
+  };
+  const lead = world.nextId; // the tracked (camera) seed's id-to-be
+  mk(true, mods.heirSteers);
+  colony.heirSeedId = lead;
+  // Twin Heir: a second propagule founds a free backup colony (not followed)
+  if (mods.twinHeir) mk(false, 0);
+  emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: heir.faction });
+  return true;
+}
+
+/**
+ * The Drift: an Heir Seed makes landfall — it founds the next Heir and the
+ * old garden retires into a Legacy garden (autonomous, off-camera, trickling
+ * Legacy). Returns whether it rooted.
+ */
+function foundHeir(world: World, s: import('./types').Seed, ast: Asteroid, angleRad: number): boolean {
+  const colony = world.colonies.find((c) => c.id === s.colonyId);
+  const pioneer = colony ? colonyMods(colony).pioneerRoot : false;
+  const ok = sproutAt(world, s.colonyId, s.faction, ast, angleRad, pioneer);
+  if (ok && colony) {
+    const np = world.plants[world.plants.length - 1];
+    // retire the whole previous garden: every living, un-retired plant of this
+    // colony except the newborn Heir seals into Legacy
+    let sealed = 0;
+    for (const p of world.plants) {
+      if (p.alive && p.colonyId === colony.id && p.id !== np.id && !p.legacy) {
+        p.legacy = true;
+        sealed++;
+      }
+    }
+    colony.heirPlantId = np.id;
+    colony.legacy += sealed * 6; // a parting inheritance lump
+    if (colonyMods(colony).quickDome) np.energy = Math.min(np.energy + 20, np.capacity);
+  }
+  if (colony && colony.heirSeedId === s.id) colony.heirSeedId = -1;
+  return ok;
+}
+
+/** The Drift's economy: retired gardens trickle Legacy; distant ones freeze
+ * into an amber snapshot (bounded sim cost); dead lineages wake a survivor. */
+function stepDrift(world: World, dt: number): void {
+  if (!world.drift) return;
+  const FREEZE_DIST = 1700;
+  for (const colony of world.colonies) {
+    // the active window centers on the Heir (seed in flight, else the plant)
+    let center: Vec2 | null = null;
+    const seed = colony.heirSeedId >= 0 ? world.seeds.find((s) => s.id === colony.heirSeedId) : null;
+    if (seed) center = seed.pos;
+    else {
+      const heir = world.plants.find((p) => p.id === colony.heirPlantId && p.alive);
+      if (heir) center = heir.astPos;
+    }
+    const rateMult = colonyMods(colony).legacyRateMult;
+    for (const p of world.plants) {
+      if (!p.alive || p.colonyId !== colony.id || !p.legacy) continue;
+      const far = center ? dist(p.astPos, center) > FREEZE_DIST : true;
+      if (far && !p.frozen) {
+        // freeze: sample the current rate and stop simulating
+        p.frozen = true;
+        p.legacyRate = Math.max(0, p.parts.filter((q) => !q.dead).length * 0.02) * rateMult;
+      } else if (!far && p.frozen) {
+        p.frozen = false; // thawed back into the active window
+      }
+      const rate = p.frozen
+        ? p.legacyRate
+        : (p.parts.filter((q) => !q.dead).length * 0.02 +
+            Math.max(p.lastIncome - p.lastUpkeep, 0) * 0.25) *
+          rateMult;
+      colony.legacy += rate * dt;
+    }
+    // succession (§15.6): the Heir is gone and none in flight — wake the
+    // newest surviving Legacy garden as the next Heir
+    const heirAlive = world.plants.some((p) => p.id === colony.heirPlantId && p.alive);
+    if (!heirAlive && colony.heirSeedId < 0) {
+      let heirLine: import('./types').Plant | null = null;
+      for (const p of world.plants) {
+        if (p.alive && p.colonyId === colony.id && (!heirLine || p.id > heirLine.id)) heirLine = p;
+      }
+      if (heirLine) {
+        heirLine.legacy = false;
+        heirLine.frozen = false;
+        colony.heirPlantId = heirLine.id;
+      }
+    }
+  }
+}
+
 function stepSeeds(world: World, dt: number): void {
   const modsBy = new Map(world.colonies.map((c) => [c.id, colonyMods(c)] as const));
+  // The Drift: a followed Heir Seed that is lost (fizzle) frees the camera to
+  // fall back along the lineage (succession happens in stepDrift).
+  const clearHeir = (s: import('./types').Seed): void => {
+    if (!s.heir) return;
+    const c = world.colonies.find((cc) => cc.id === s.colonyId);
+    if (c && c.heirSeedId === s.id) c.heirSeedId = -1;
+  };
   for (let i = world.seeds.length - 1; i >= 0; i--) {
     const s = world.seeds[i];
 
@@ -813,6 +952,7 @@ function stepSeeds(world: World, dt: number): void {
       if (!rock) {
         // the rock is gone and we weren't sprouted with it — a lost seed
         emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+        clearHeir(s);
         world.seeds.splice(i, 1);
         continue;
       }
@@ -827,6 +967,7 @@ function stepSeeds(world: World, dt: number): void {
       const mount = world.fauna.find((f) => f.id === s.ridingFauna);
       if (!mount) {
         emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+        clearHeir(s);
         world.seeds.splice(i, 1);
         continue;
       }
@@ -837,7 +978,9 @@ function stepSeeds(world: World, dt: number): void {
         if (ast.id === s.ignoreAst) continue; // not back onto the birth rock
         if (dist(s.pos, ast.pos) < ast.radius + 26) {
           const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
-          const ok = sproutAt(world, s.colonyId, s.faction, ast, angle);
+          const ok = s.heir
+            ? foundHeir(world, s, ast, angle)
+            : sproutAt(world, s.colonyId, s.faction, ast, angle);
           const at = add(ast.pos, scale(fromAngle(angle), ast.radius));
           emit({ type: ok ? 'seedLand' : 'seedFizzle', x: at.x, y: at.y, faction: s.faction });
           world.seeds.splice(i, 1);
@@ -874,6 +1017,7 @@ function stepSeeds(world: World, dt: number): void {
     s.age += dt;
     if (s.age > s.maxAge) {
       emit({ type: 'seedFizzle', x: s.pos.x, y: s.pos.y, faction: s.faction });
+      clearHeir(s);
       world.seeds.splice(i, 1);
       continue;
     }
@@ -899,9 +1043,12 @@ function stepSeeds(world: World, dt: number): void {
       }
     }
     if (mounted) continue;
-    // hardened seeds are slow cannonballs: they bruise rival growth they hit
+    // hardened seeds are slow cannonballs: they bruise rival growth they hit.
+    // Stone Coat (Drift) armors an Heir Seed so it passes rival canopy unharmed.
     let hitRival = false;
+    const armored = s.heir && modsBy.get(s.colonyId)?.seedArmor;
     for (const plant of world.plants) {
+      if (armored) break;
       if (!plant.alive || plant.colonyId === s.colonyId) continue;
       if (dist(s.pos, plant.astPos) > 320) continue;
       for (const p of plant.parts) {
@@ -923,6 +1070,7 @@ function stepSeeds(world: World, dt: number): void {
       if (hitRival) break;
     }
     if (hitRival) {
+      clearHeir(s);
       world.seeds.splice(i, 1);
       continue;
     }
@@ -932,7 +1080,9 @@ function stepSeeds(world: World, dt: number): void {
       if (ast.id === s.ignoreAst && s.age < 1.2) continue;
       if (dist(s.pos, ast.pos) < ast.radius + 4) {
         const angle = Math.atan2(s.pos.y - ast.pos.y, s.pos.x - ast.pos.x);
-        const ok = sproutAt(world, s.colonyId, s.faction, ast, angle);
+        const ok = s.heir
+          ? foundHeir(world, s, ast, angle)
+          : sproutAt(world, s.colonyId, s.faction, ast, angle);
         const at = add(ast.pos, scale(fromAngle(angle), ast.radius));
         emit({
           type: ok ? 'seedLand' : 'seedFizzle',
@@ -1010,11 +1160,13 @@ export function stepWorld(world: World, dt: number): void {
   stepSeeds(world, dt);
   stepDebris(world, dt);
   stepFauna(world, dt);
+  stepTraps(world, dt);
   if (world.tick % 5 === 0) {
     applyContactDamage(world, dt * 5);
     stepHaustoria(world, dt * 5);
   }
   stepDeaths(world);
+  if (world.drift) stepDrift(world, dt);
   if (world.dimming && world.roundState === 'playing') {
     world.dimming.x += world.dimming.speed * dt; // the darkness never rests
   }
@@ -1023,6 +1175,124 @@ export function stepWorld(world: World, dt: number): void {
     stepVanguard(world, dt * 10);
     stepMutations(world);
     checkRoundEnd(world);
+  }
+}
+
+/** Per-second base odds a snared critter tears free of the sticky dew — the
+ * bigger the bug, the better its chances. Scarabaeidae/Araneae need a mutation
+ * to hold at all. */
+const TRAP_ESCAPE: Partial<Record<import('./types').FaunaKind, number>> = {
+  frugivora: 0.4,
+  phytophaga: 0.1,
+  anthophila: 0.02,
+  lampyridae: 0.14,
+  scarabaeidae: 0.6,
+  araneae: 0.3,
+};
+
+/**
+ * Droseraceae's traps (§16.1): sticky leaves snare fauna that stray (or are
+ * lured) within reach, drag them to the trap, and digest them alive — flesh
+ * becomes energy. This IS the carnivore's economy; a garden with no prey
+ * slowly starves on its trickle of photosynthesis.
+ */
+function stepTraps(world: World, dt: number): void {
+  for (const plant of world.plants) {
+    if (!plant.alive || plant.frozen) continue;
+    const C = FACTIONS[plant.faction].energy.carnivore;
+    if (!C) continue;
+    const mods = colonyMods(world.colonies.find((c) => c.id === plant.colonyId));
+    const reach = C.reach + mods.trapReachAdd;
+    // the trap mouths: this plant's living leaf tips (world coords)
+    const mouths: Vec2[] = [];
+    for (const p of plant.parts) {
+      if (!p.dead && p.kind === 'leaf') mouths.push(add(plant.astPos, p.tip));
+    }
+    if (mouths.length === 0) continue;
+
+    // carnivoreLure (Scent Glands): the plant itself draws fauna toward it
+    if (mods.carnivoreLure) {
+      for (const fn of world.fauna) {
+        if (fn.trappedBy >= 0) continue;
+        const d = dist(fn.pos, plant.astPos);
+        if (d > 520 || d < 1) continue;
+        const pull = scale(norm(sub(plant.astPos, fn.pos)), 26 * dt);
+        fn.vel.x += pull.x;
+        fn.vel.y += pull.y;
+      }
+    }
+
+    for (const fn of world.fauna) {
+      const big = fn.kind === 'scarabaeidae' || fn.kind === 'araneae';
+      if (big && !mods.trapScarabs) continue;
+
+      if (fn.trappedBy === plant.id) {
+        // struggle: a size-scaled per-second escape roll
+        const esc = (TRAP_ESCAPE[fn.kind] ?? 0.1) * mods.trapHoldMult;
+        if (world.rng.next() < esc * dt) {
+          fn.trappedBy = -1;
+          fn.state = 'wander';
+          continue;
+        }
+        // drag toward the nearest mouth, then digest at its heart
+        let near = mouths[0];
+        let bd = Infinity;
+        for (const mth of mouths) {
+          const d2 = (mth.x - fn.pos.x) ** 2 + (mth.y - fn.pos.y) ** 2;
+          if (d2 < bd) {
+            bd = d2;
+            near = mth;
+          }
+        }
+        const to = sub(near, fn.pos);
+        const d = len(to);
+        if (d > 10) {
+          const pull = scale(norm(to), (mods.livingSnare ? 46 : 30));
+          fn.pos.x += pull.x * dt;
+          fn.pos.y += pull.y * dt;
+          fn.vel.x *= 0.6;
+          fn.vel.y *= 0.6;
+        } else {
+          const bite = C.digestRate * mods.digestMult * dt;
+          fn.hp -= bite;
+          plant.energy = Math.min(plant.energy + bite * C.energyPerHp, plant.capacity);
+          if (world.tick % 5 === 0) emit({ type: 'impact', x: fn.pos.x, y: fn.pos.y, power: 3 });
+          if (fn.hp <= 0 && mods.killBurst) {
+            // Digestive Bloom: the sated trap bursts a free seed
+            plant.energy = Math.min(plant.energy + 10, plant.capacity);
+            const out = fromAngle(world.rng.range(0, Math.PI * 2));
+            world.seeds.push({
+              id: world.nextId++,
+              colonyId: plant.colonyId,
+              faction: plant.faction,
+              pos: { ...near },
+              vel: scale(out, 70),
+              age: 0,
+              maxAge: 3,
+              riding: -1,
+              ridingFauna: -1,
+              ignoreAst: plant.asteroidId,
+              heir: false,
+              steers: 0,
+            });
+            emit({ type: 'seedLaunch', x: near.x, y: near.y, faction: plant.faction });
+          }
+        }
+        continue;
+      }
+
+      // free critter: snare it if a mouth is within reach and it isn't
+      // already someone else's catch
+      if (fn.trappedBy >= 0 || fn.webPrey >= 0) continue;
+      for (const mth of mouths) {
+        if (dist(fn.pos, mth) < reach) {
+          fn.trappedBy = plant.id;
+          fn.state = 'trapped';
+          emit({ type: 'impact', x: fn.pos.x, y: fn.pos.y, power: 5 });
+          break;
+        }
+      }
+    }
   }
 }
 
@@ -1099,6 +1369,9 @@ function stepDeaths(world: World): void {
 function stepMutations(world: World): void {
   if (world.roundState !== 'playing') return;
   for (const c of world.colonies) {
+    // The Drift replaces the player's timed drafts with a buy-anytime shop
+    // (feral AI colonies still draft on the clock).
+    if (world.drift && c.isPlayer) continue;
     if (c.pendingOffer || world.time < c.nextMutationAt) continue;
     const draft = c.mutations.length + 1; // one keep per opportunity
     if (draft > 3) {
@@ -1513,6 +1786,9 @@ export function hashWorld(world: World): number {
     mix(c.verbReadyAt.lure);
     mix(c.verbReadyAt.bless);
     mix(c.verbReadyAt.prune);
+    mix(c.legacy * 100);
+    mix(c.heirPlantId);
+    mix(c.heirSeedId);
   }
   mix(world.faunaRespawns.length);
   mix(world.debris.length);

@@ -90,6 +90,8 @@ describe('competition (M5)', () => {
       maxAge: 5,
       riding: -1,
       ridingFauna: -1,
+      heir: false,
+      steers: 0,
       ignoreAst: -1,
     });
     for (let i = 0; i < 30; i++) stepWorld(w, TUNING.simDt);

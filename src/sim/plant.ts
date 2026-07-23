@@ -89,11 +89,15 @@ export function createPlant(
     canopyLeaves: 0,
     shadowLeaves: 0,
     totalLeaves: 0,
+    legacy: false,
+    frozen: false,
+    legacyRate: 0,
   };
 }
 
 export function stepPlant(world: World, plant: Plant, dt: number, canopy: CanopyIndex): void {
   if (!plant.alive) return; // husks are inert until decomposers exist (M8)
+  if (plant.frozen) return; // the Drift: amber-frozen legacy gardens don't sim
   const f = FACTIONS[plant.faction];
   const asteroid = world.asteroids.find((a) => a.id === plant.asteroidId);
   if (!asteroid) return;
@@ -153,6 +157,8 @@ export function stepPlant(world: World, plant: Plant, dt: number, canopy: Canopy
               maxAge: 3.5,
               riding: -1,
               ridingFauna: -1,
+              heir: false,
+              steers: 0,
               ignoreAst: plant.asteroidId,
             });
             emit({ type: 'seedLaunch', x: at.x, y: at.y, faction: owner.faction });
@@ -409,22 +415,32 @@ export function substrateHalfAngle(plant: Plant): number {
   return arcLen / r;
 }
 
-/** Can a seed of this faction take root at this angle? (bed + spacing rule) */
+/**
+ * Can a seed of this faction take root at this angle? (bed + spacing rule)
+ * The Drift's Pioneer Root relaxes this to a bare no-overlap minimum, so an
+ * Heir Seed can take hold even inside a rival garden.
+ */
 export function canRootAt(
   world: World,
   ast: Asteroid,
   angleRad: number,
   faction: FactionId,
+  pioneer = false,
 ): boolean {
   const R = FACTIONS[faction].repro;
   const seedHalf = (TUNING.colony.substrate.baseArc * 0.5) / ast.radius;
   const anchor = add(ast.pos, scale(fromAngle(angleRad), ast.radius));
   for (const pl of world.plants) {
     if (!pl.alive || pl.asteroidId !== ast.id) continue;
+    const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
+    if (pioneer) {
+      // pioneers ignore beds — only refuse to root right on top of another plant
+      if (dist(anchor, other) < 22) return false;
+      continue;
+    }
     let gap = Math.abs(angleRad - pl.anchorAngle) % (Math.PI * 2);
     if (gap > Math.PI) gap = Math.PI * 2 - gap;
     if (gap < substrateHalfAngle(pl) + seedHalf) return false;
-    const other = add(ast.pos, scale(fromAngle(pl.anchorAngle), ast.radius));
     if (dist(anchor, other) < R.minSpacing) return false;
   }
   return true;
@@ -619,6 +635,8 @@ export function fireCone(world: World, plant: Plant, coneId: number, dir: Vec2 |
       maxAge: range / R.seedSpeed,
       riding: -1,
       ridingFauna: -1,
+      heir: false,
+      steers: 0,
       ignoreAst: plant.asteroidId,
     });
   }
@@ -874,6 +892,8 @@ export function pruneAlongPath(world: World, plant: Plant, path: Vec2[]): PruneR
         maxAge: 2.6,
         riding: -1,
         ridingFauna: -1,
+        heir: false,
+        steers: 0,
         ignoreAst: plant.asteroidId,
       });
       emit({ type: 'seedLaunch', x: from.x, y: from.y, faction: plant.faction });

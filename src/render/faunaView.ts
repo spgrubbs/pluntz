@@ -37,6 +37,19 @@ export class FaunaView {
         at.x + fx * cs - fy * sn,
         at.y + fx * sn + fy * cs,
       ];
+      // Droseraceae: a glistening sticky strand out to the trap that holds it
+      if (fn.trappedBy >= 0) {
+        const host = world.plants.find((p) => p.id === fn.trappedBy);
+        if (host) {
+          const hx = host.astPos.x + host.parts[0].tip.x;
+          const hy = host.astPos.y + host.parts[0].tip.y;
+          const sag = Math.sin(world.time * 9 + fn.id) * 2;
+          g.moveTo(hx, hy)
+            .quadraticCurveTo((hx + at.x) / 2, (hy + at.y) / 2 + 8 + sag, at.x, at.y)
+            .stroke({ width: 1.2, color: 0xffd0dc, alpha: 0.7 });
+          gl.circle(at.x, at.y, 8).fill({ color: 0xff6a8a, alpha: 0.18 });
+        }
+      }
       switch (fn.kind) {
         case 'frugivora': {
           // a solar-sail ray: it doesn't flap, it TACKS — two translucent

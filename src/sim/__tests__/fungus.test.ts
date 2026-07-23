@@ -114,6 +114,8 @@ describe('Basidiomycota (M8)', () => {
       maxAge: 6,
       riding: -1,
       ridingFauna: -1,
+      heir: false,
+      steers: 0,
       ignoreAst: -1,
     });
     run(w, 40);
@@ -155,6 +157,8 @@ describe('Basidiomycota (M8)', () => {
       maxAge: 6,
       riding: -1,
       ridingFauna: -1,
+      heir: false,
+      steers: 0,
       ignoreAst: rock.id,
     });
     const id = w.seeds[w.seeds.length - 1].id;

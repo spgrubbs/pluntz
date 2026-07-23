@@ -7,7 +7,8 @@ export type FactionId =
   | 'anthophyta'
   | 'basidiomycota'
   | 'lichenes' // lithovore: eats bare rock, ignores light and death
-  | 'cuscuta'; // parasite: cannot stand alone, drains a living host colony
+  | 'cuscuta' // parasite: cannot stand alone, drains a living host colony
+  | 'droseraceae'; // carnivore: sticky traps snare & digest fauna for food
 
 export type PartKind = 'heart' | 'root' | 'stem' | 'leaf' | 'cone';
 
@@ -111,6 +112,14 @@ export interface Plant {
   canopyLeaves: number; // shaded by foliage (own or rival) — half income
   shadowLeaves: number; // in hard rock shadow — near-zero income
   totalLeaves: number;
+  /** The Drift (§15): a retired garden — autonomous, off-camera, trickling
+   * Legacy to its colony. Verbs don't reach it. */
+  legacy: boolean;
+  /** The Drift: an amber-frozen legacy garden far from the active window —
+   * it stops simulating and pays its sampled Legacy rate instead. */
+  frozen: boolean;
+  /** The Drift: the sampled Legacy income/sec used while frozen. */
+  legacyRate: number;
 }
 
 export interface Asteroid {
@@ -145,6 +154,13 @@ export interface Colony {
   /** Verbs run on cooldowns (no currency): sim time each one is ready again.
    * Base durations in TUNING.verbs, flavored per clade by FactionDef.verbHaste. */
   verbReadyAt: { ping: number; lure: number; bless: number; prune: number };
+  /** The Drift (§15): the plant the camera currently follows, -1 = none. */
+  heirPlantId: number;
+  /** The Drift: the Heir Seed in flight the camera rides, -1 = none. */
+  heirSeedId: number;
+  /** The Drift: Legacy — the lineage resource retired gardens trickle,
+   * spent at will on the mutation shop. */
+  legacy: number;
 }
 
 /** An airborne seed: ballistic, sprouts where it lands. */
@@ -161,6 +177,11 @@ export interface Seed {
   /** The launch rock: ignored for landing while the seed is young, so
    * surface-hugging launchers (fungal domes) don't eat their own spores. */
   ignoreAst: number;
+  /** The Drift (§15): an Heir Seed the camera follows; on rooting it founds
+   * the next Heir and retires the old garden to Legacy. */
+  heir: boolean;
+  /** The Drift: remaining mid-flight steering nudges (Tendril Vanes). */
+  steers: number;
 }
 
 export interface Ping {
@@ -185,7 +206,7 @@ export interface Fauna {
   kind: FaunaKind;
   pos: Vec2;
   vel: Vec2;
-  state: 'wander' | 'toFruit' | 'deliver' | 'graze' | 'push' | 'nest';
+  state: 'wander' | 'toFruit' | 'deliver' | 'graze' | 'push' | 'nest' | 'trapped';
   targetPlant: number; // plant id, -1 none
   targetPart: number; // part id, -1 none
   targetAst: number; // asteroid id, -1 none
@@ -198,6 +219,9 @@ export interface Fauna {
   satiety: number; // 0 hungry .. 1 full; grazers leave when full, return when hungry
   wander: number; // per-individual lateral wander phase (curved flight)
   webPrey: number; // araneae: fauna id snared in the web, -1 none
+  /** Droseraceae: the carnivore plant whose trap has snared this critter,
+   * -1 = free. Trapped fauna are dragged in and digested. */
+  trappedBy: number;
   /** Idle flight rides orbits around rocks (looks celestial, is cheap). */
   orbit: { ast: number; r: number; a: number; dir: number } | null;
 }
@@ -250,6 +274,10 @@ export interface World {
   canopyHolder: number; // colonyId currently above the share threshold, -1 none
   canopyHeldSec: number;
   canopyShares: { colonyId: number; share: number }[];
+  /** The Drift (§15): follow-the-propagule exploration mode is active. The
+   * camera rides one lineage; retired gardens become Legacy income; the
+   * mutation shop replaces timed drafts. */
+  drift: boolean;
 }
 
 export interface MapDef {
@@ -271,6 +299,8 @@ export interface MapDef {
    * to cross the threshold and win the region. Rivals can steal it. */
   vanguard?: { asteroid: number; holdSec: number };
   canopyWin?: { share: number; holdSec: number };
+  /** The Drift (§15): follow-the-propagule exploration mode. */
+  drift?: boolean;
   asteroids: { x: number; y: number; r: number; rich?: boolean }[];
   colonies: {
     name: string;

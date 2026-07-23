@@ -16,6 +16,7 @@ const FACTION_CHOICES: { id: FactionId; label: string; blurb: string }[] = [
   { id: 'basidiomycota', label: '🍄 Basidiomycota', blurb: 'detritivore web · eats husks, spores infect' },
   { id: 'lichenes', label: '🪨 Lichenes', blurb: 'lithovore crust · eats bare rock, near-unkillable' },
   { id: 'cuscuta', label: '🩸 Cuscuta', blurb: 'parasite thread · drains living rivals from within' },
+  { id: 'droseraceae', label: '🪤 Droseraceae', blurb: 'carnivore traps · snares & digests fauna for food' },
 ];
 
 /** The front door: map, factions, seed, GROW. */

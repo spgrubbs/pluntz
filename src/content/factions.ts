@@ -49,14 +49,24 @@ export interface FactionDef {
     priorities: { id: IntentId; text: string }[];
   };
   energy: {
-    /** photo = sun; decomp = husks; litho = bare rock; parasite = host energy. */
-    mode: 'photo' | 'decomp' | 'litho' | 'parasite';
+    /** photo = sun; decomp = husks; litho = bare rock; parasite = host
+     * energy; carnivore = digested fauna. Carnivores still photosynthesize
+     * weakly (they flow through the photo leaf path), so they read `photo`
+     * for income but carry a `carnivore` block that the trap step consumes. */
+    mode: 'photo' | 'decomp' | 'litho' | 'parasite' | 'carnivore';
     /** decomp mode only. */
     decomp?: { huskRate: number; huskYield: number };
     /** litho mode: income per claimed arc-length, richer on rich rock. */
     litho?: { rockRate: number; richMult: number };
     /** parasite mode: energy siphoned per second from a touched rival part. */
     parasite?: { siphonRate: number; reach: number; drainDamage: number };
+    /** carnivore mode: sticky traps snare fauna and digest them. */
+    carnivore?: {
+      reach: number; // trap radius around a leaf tip
+      digestRate: number; // hp/s drained from a snared critter
+      energyPerHp: number; // energy the plant gains per hp digested
+      escape: number; // per-second odds a snared critter tears free (size-scaled)
+    };
     heartInitial: number;
     capBase: number;
     capPerPart: number;
@@ -746,10 +756,133 @@ export const CUSCUTA: FactionDef = {
   },
 };
 
+/** DROSERACEAE — the carnivore (sundew): a glistening trap-plant that chases
+ * meat, not light. Its leaves are sticky snares; fauna that wander (or are
+ * lured) within reach are held and digested alive — their flesh is its food.
+ * Photosynthesis is a trickle; the Lure is its dinner bell. */
+export const DROSERACEAE: FactionDef = {
+  id: 'droseraceae',
+  name: 'Droseraceae',
+  render: { leaf: 'broad', heart: 'bulb', repro: 'flower' },
+  terms: { leaf: 'traps', leafOne: 'trap', cone: 'seed stalk', trunk: 'stem' },
+  verbHaste: { lure: 0.55 }, // the dinner bell rings often
+  palettes: [
+    {
+      stem: 0x9a4a5a, // wet carmine stalks
+      stemOld: 0x743646,
+      leaf: 0xff5a7e, // dew-tipped scarlet pads
+      leafCanopy: 0xd8466a,
+      leafShaded: 0xb03a58,
+      leafStarving: 0xd8c34a,
+      root: 0x7a4048,
+      heart: 0xe23a6a,
+      heartCore: 0xffe08a, // the digestive glow
+      cone: 0xff86a6,
+      coneArmed: 0xffd06a,
+      seed: 0xffb0c0,
+      litter: 0x4a2630, // stained mire around the trap
+    },
+    {
+      stem: 0x8a6a3a, // amber-gland cultivar
+      stemOld: 0x6a5230,
+      leaf: 0xffb14a,
+      leafCanopy: 0xd8923e,
+      leafShaded: 0xb0742e,
+      leafStarving: 0xd8c34a,
+      root: 0x6a5238,
+      heart: 0xe2963a,
+      heartCore: 0xfff0a0,
+      cone: 0xffc86a,
+      coneArmed: 0xffe06a,
+      seed: 0xffd8a0,
+      litter: 0x4a3a22,
+    },
+  ],
+  behavior: {
+    summary:
+      'A carnivore that hunts, not basks. Its dew-tipped traps snare any ' +
+      'fauna that strays or is lured within reach, holding them fast while ' +
+      'the plant digests them alive — their flesh is its real food. It ' +
+      'photosynthesizes only a trickle, so a garden without prey slowly ' +
+      'starves. Place the Lure over it and the whole ecology becomes a farm.',
+    priorities: [
+      { id: 'anchor', text: 'Anchor: sink roots into the rock' },
+      { id: 'needles', text: 'Unfurl sticky traps on every stem' },
+      { id: 'trunk', text: 'Raise low stems to spread the traps wide' },
+      { id: 'branches', text: 'Fan side stems for a broader snare' },
+      { id: 'cones', text: 'Raise seed stalks; fling seeds to fresh rock' },
+      { id: 'mature', text: 'Digest, and wait for the next meal to wander in' },
+    ],
+  },
+  life: {
+    hp: { heart: 52, root: 24, stem: 20, leaf: 12, cone: 12 },
+    hpVariance: 0.2,
+    starveDps: { leaf: 1.0, stem: 0.5, root: 0.5, heart: 0.9, cone: 1.0 },
+    hardenAge: 70,
+    hardenBonus: 8,
+    leafLifespan: [140, 220],
+    pruneRefund: 0.4,
+  },
+  repro: {
+    style: 'ballistic',
+    coneMax: 2,
+    coneCost: 6,
+    coneEnergy: 26,
+    chargeRate: 2.0,
+    armedAutoFire: 8,
+    aiAutoFire: 4,
+    seedSpeed: 78,
+    seedRange: 520,
+    seedStartEnergy: 32,
+    minSpacing: 50,
+  },
+  energy: {
+    mode: 'carnivore',
+    carnivore: { reach: 46, digestRate: 5, energyPerHp: 0.7, escape: 0.05 },
+    heartInitial: 44,
+    capBase: 62,
+    capPerPart: 2,
+    reserve: 4,
+    heartIncome: 0.12,
+    leafIncome: 0.55, // a trickle — the traps must eat to thrive
+    minAngleEff: 0.4,
+    canopyShade: 0.5,
+    shadeFloor: 0.2,
+    upkeep: { heart: 0.14, root: 0.05, stem: 0.06, leaf: 0.09, cone: 0.1 },
+  },
+  growth: {
+    style: 'spire',
+    actionCooldown: 0.42,
+    rootMax: 2,
+    rootCost: 5,
+    rootLen: 12,
+    stemCost: 5,
+    leafCost: 5,
+    trunkTarget: 8, // a low, wide rosette — not a tower
+    trunkSegLen: 7,
+    trunkTaper: 0.2,
+    branchEvery: 1,
+    branchStartDepth: 1,
+    branchAngleDeg: 82, // near-horizontal fans of traps
+    branchSegLen: 7.5,
+    branchCurl: 0.05,
+    leafLen: 8,
+    leafAngleDeg: 70,
+    leavesPerTrunkStem: 2,
+    leavesPerBranchStem: 2,
+    wPrevDir: 0.4,
+    wUp: 0.34,
+    wSun: 0.12,
+    wNoise: 0.05,
+    wTangent: 0.1,
+  },
+};
+
 export const FACTIONS: Record<FactionId, FactionDef> = {
   pinophyta: PINOPHYTA,
   anthophyta: ANTHOPHYTA,
   basidiomycota: BASIDIOMYCOTA,
   lichenes: LICHENES,
   cuscuta: CUSCUTA,
+  droseraceae: DROSERACEAE,
 };

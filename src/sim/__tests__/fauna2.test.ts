@@ -142,6 +142,8 @@ describe('new fauna (13.4)', () => {
       maxAge: 3,
       riding: -1,
       ridingFauna: -1,
+      heir: false,
+      steers: 0,
       ignoreAst: w.asteroids[0].id,
     });
     stepWorld(w, TUNING.simDt);

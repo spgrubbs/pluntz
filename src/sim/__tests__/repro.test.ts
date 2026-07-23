@@ -97,6 +97,8 @@ describe('reproduction (M4)', () => {
       maxAge: 0.1, // would fizzle almost immediately if it weren't riding
       riding: -1,
       ridingFauna: -1,
+      heir: false,
+      steers: 0,
       ignoreAst: -1,
     });
     // the seed's own maxAge (0.1s) would fizzle it in flight; only by mounting

@@ -28,6 +28,11 @@ export class Camera {
   y = 0;
   zoom = 1;
 
+  /** Whether the user currently has a finger/pointer down (for auto-follow). */
+  get dragging(): boolean {
+    return this.pointers.size > 0;
+  }
+
   private pointers = new Map<number, PointerInfo>();
   private pinchDist = 0;
   private dragConsumed = false;

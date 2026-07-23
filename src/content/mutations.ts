@@ -335,6 +335,68 @@ export const MUTATIONS: Record<FactionId, MutationDef[]> = {
       desc: 'Pods burst in a fan — fling seeds across a whole empire at once.',
     },
   ],
+  droseraceae: [
+    // draft 1
+    {
+      id: 'sweetmucilage',
+      name: 'Sweet Mucilage',
+      tier: 1,
+      desc: 'Stickier, farther-reaching dew: traps snare from wider and hold prey far more tightly.',
+    },
+    {
+      id: 'pitcher',
+      name: 'Pitcher',
+      tier: 1,
+      desc: 'A great gaping trap that can seize even a Scarabaeidae — nothing is too big to eat.',
+    },
+    {
+      id: 'fatalnectar',
+      name: 'Fatal Nectar',
+      tier: 1,
+      bonus: true,
+      desc: 'Snared prey is digested twice as fast — meat becomes energy in moments.',
+    },
+    // draft 2
+    {
+      id: 'digestivebloom',
+      name: 'Digestive Bloom',
+      tier: 2,
+      desc: 'Every kill bursts: a surge of energy and a free seed flung from the sated trap.',
+    },
+    {
+      id: 'snapfast',
+      name: 'Snapfast',
+      tier: 2,
+      desc: 'Traps close instantly — small bugs almost never wriggle free.',
+    },
+    {
+      id: 'scentglands',
+      name: 'Scent Glands',
+      tier: 2,
+      bonus: true,
+      desc: 'You ARE the bait: the plant exudes a constant scent, drawing fauna toward it from afar.',
+    },
+    // draft 3
+    {
+      id: 'maneater',
+      name: 'Man-Eater',
+      tier: 3,
+      desc: 'Traps seize the biggest prey — Scarabaeidae and Araneae alike — and hold them fast.',
+    },
+    {
+      id: 'carrionbloom',
+      name: 'Carrion Bloom',
+      tier: 3,
+      desc: 'Its reach lengthens and its hunger deepens — nothing that dies nearby is wasted.',
+    },
+    {
+      id: 'livingsnare',
+      name: 'Living Snare',
+      tier: 3,
+      bonus: true,
+      desc: 'The traps lunge: they reach far and drag struggling prey inexorably inward.',
+    },
+  ],
 };
 
 /** AI colonies pick the earliest of these present in a draft. */
@@ -394,8 +456,101 @@ export const AI_MUTATION_PREF: Record<FactionId, string[]> = {
     'hemophage',
     'dodderstorm',
   ],
+  droseraceae: [
+    'sweetmucilage',
+    'fatalnectar',
+    'pitcher',
+    'digestivebloom',
+    'scentglands',
+    'snapfast',
+    'livingsnare',
+    'maneater',
+    'carrionbloom',
+  ],
 };
 
-export function mutationDef(faction: FactionId, id: string): MutationDef | undefined {
-  return MUTATIONS[faction]?.find((m) => m.id === id);
+/** Look up a card by id — either a clade draft card or a Drift shop card. */
+export function mutationDef(
+  faction: FactionId,
+  id: string,
+): { id: string; name: string; desc: string; tier?: 1 | 2 | 3; bonus?: boolean } | undefined {
+  return MUTATIONS[faction]?.find((m) => m.id === id) ?? DRIFT_CATALOG.find((m) => m.id === id);
+}
+
+/**
+ * The Drift (§15) shop catalog: cross-clade "outfitting" cards bought with
+ * Legacy at any time, organized into four strands. Costs scale with how many
+ * you already own (see driftCost). The timed-draft system is untouched in
+ * skirmish/Long Road; the Drift spends Legacy instead.
+ */
+export interface DriftCard {
+  id: string;
+  name: string;
+  strand: 'mobility' | 'protection' | 'sensing' | 'colonization';
+  cost: number; // base Legacy price
+  desc: string;
+}
+
+export const DRIFT_CATALOG: DriftCard[] = [
+  {
+    id: 'drift_longshot',
+    name: 'Longshot',
+    strand: 'mobility',
+    cost: 30,
+    desc: 'Heir Seeds launch 70% farther — reach rocks across the dark.',
+  },
+  {
+    id: 'drift_vanes',
+    name: 'Tendril Vanes',
+    strand: 'mobility',
+    cost: 40,
+    desc: 'Steer an Heir Seed in flight: tap to nudge it, three times per launch.',
+  },
+  {
+    id: 'drift_twinheir',
+    name: 'Twin Heir',
+    strand: 'mobility',
+    cost: 70,
+    desc: 'Launch two Heir Seeds at once; the camera follows the lead, the other founds a free colony.',
+  },
+  {
+    id: 'drift_stonecoat',
+    name: 'Stone Coat',
+    strand: 'protection',
+    cost: 35,
+    desc: 'Armored seeds and tougher gardens: Heir Seeds survive bites and hostile landings.',
+  },
+  {
+    id: 'drift_wideeye',
+    name: 'Wide Eye',
+    strand: 'sensing',
+    cost: 30,
+    desc: 'A broader torch: the revealed corridor around the lineage widens.',
+  },
+  {
+    id: 'drift_pioneer',
+    name: 'Pioneer Root',
+    strand: 'colonization',
+    cost: 45,
+    desc: 'Root anywhere — Heir Seeds take hold even inside a rival garden.',
+  },
+  {
+    id: 'drift_quickdome',
+    name: 'Quick Dome',
+    strand: 'colonization',
+    cost: 40,
+    desc: 'New gardens wake with a deep reserve, shrinking the vulnerable landfall.',
+  },
+  {
+    id: 'drift_richvein',
+    name: 'Rich Vein',
+    strand: 'colonization',
+    cost: 55,
+    desc: 'Retired gardens run richer — every Legacy garden trickles 80% more.',
+  },
+];
+
+/** The Legacy price of a card, scaling with how many the colony already owns. */
+export function driftCost(base: number, owned: number): number {
+  return Math.round(base * Math.pow(1.55, owned));
 }

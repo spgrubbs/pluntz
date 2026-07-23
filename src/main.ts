@@ -1,5 +1,5 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import { createWorld, stepWorld, spawnDebris, setPing, placeLure } from './sim/world';
+import { createWorld, stepWorld, spawnDebris, setPing, placeLure, launchHeir } from './sim/world';
 import { pruneAlongPath, fireCone } from './sim/plant';
 import { setEventSink } from './sim/events';
 import type { Asteroid, FactionId, MapDef, Plant, World } from './sim/types';
@@ -51,7 +51,8 @@ async function boot(): Promise<void> {
     x === 'anthophyta' ||
     x === 'basidiomycota' ||
     x === 'lichenes' ||
-    x === 'cuscuta';
+    x === 'cuscuta' ||
+    x === 'droseraceae';
   const pf = params.get('faction');
   const af = params.get('ai');
   const urlMap = params.get('map') ?? '';
@@ -125,6 +126,7 @@ async function boot(): Promise<void> {
   let pingMode = false;
   let blessMode = false;
   let lureMode = false;
+  let heirMode = false; // the Drift: arm launchHeir, then tap to aim/launch
   let prunePath: Vec2[] | null = null;
   let draggedRock: Asteroid | null = null;
   let aiming: { plant: Plant; coneId: number; pos: Vec2 } | null = null;
@@ -201,6 +203,34 @@ async function boot(): Promise<void> {
       draggedRock = null;
     },
     onTap(worldPos: Vec2): void {
+      // The Drift: while an Heir Seed is in flight the screen IS the seed —
+      // a tap nudges it (Tendril Vanes), consuming one steer charge
+      if (world.drift) {
+        const pc = world.colonies.find((c) => c.id === playerColonyId);
+        const heirSeed = pc && pc.heirSeedId >= 0
+          ? world.seeds.find((s) => s.id === pc.heirSeedId)
+          : null;
+        if (heirSeed) {
+          if (heirSeed.steers > 0) {
+            const to = sub(worldPos, heirSeed.pos);
+            const d = Math.hypot(to.x, to.y);
+            if (d > 1) {
+              const sp = Math.hypot(heirSeed.vel.x, heirSeed.vel.y) || 60;
+              heirSeed.vel.x = (to.x / d) * sp;
+              heirSeed.vel.y = (to.y / d) * sp;
+              heirSeed.steers--;
+              SOUND.ui('select');
+            }
+          }
+          return; // swallow taps during flight
+        }
+      }
+      if (heirMode) {
+        if (launchHeir(world, playerColonyId, worldPos)) SOUND.ui('grow');
+        heirMode = false;
+        heirBtn.classList.remove('active');
+        return;
+      }
       if (pruneMode) return; // taps in prune mode are just aborted swipes
       if (pingMode) {
         setPing(world, playerColonyId, worldPos);
@@ -284,6 +314,20 @@ async function boot(): Promise<void> {
     blessBtn.classList.remove('active');
     lureBtn.classList.toggle('active', lureMode);
   });
+  // The Drift: launch the Heir Seed — the camera will ride it
+  const heirBtn = document.createElement('button');
+  heirBtn.textContent = '⟐ launch';
+  heirBtn.addEventListener('click', () => {
+    SOUND.ui('select');
+    heirMode = !heirMode;
+    pruneMode = pingMode = blessMode = lureMode = false;
+    prunePath = null;
+    pruneBtn.classList.remove('active');
+    pingBtn.classList.remove('active');
+    blessBtn.classList.remove('active');
+    lureBtn.classList.remove('active');
+    heirBtn.classList.toggle('active', heirMode);
+  });
   const traitPanel = new TraitPanel(
     () => world,
     () => playerColonyId,
@@ -292,7 +336,7 @@ async function boot(): Promise<void> {
   // verbs live in a collapsible tray so they never cover the inspector
   const verbTray = document.createElement('div');
   verbTray.className = 'verb-tray';
-  verbTray.append(lureBtn, blessBtn, pingBtn, pruneBtn);
+  verbTray.append(heirBtn, lureBtn, blessBtn, pingBtn, pruneBtn);
   const trayToggle = document.createElement('button');
   trayToggle.className = 'tray-toggle';
   let trayOpen = true;
@@ -501,6 +545,24 @@ async function boot(): Promise<void> {
   }
 
   function updateRoundUi(): void {
+    if (world.drift) {
+      // The Drift: the chip is the lineage's ledger — Legacy + Heir status
+      roundChip.style.display = 'block';
+      const pc = world.colonies.find((c) => c.id === playerColonyId);
+      const gardens = world.plants.filter((p) => p.alive && p.colonyId === playerColonyId).length;
+      const inFlight = pc && pc.heirSeedId >= 0;
+      const status = inFlight
+        ? '⟐ Heir in flight'
+        : pc && world.plants.some((p) => p.id === pc.heirPlantId && p.alive)
+          ? 'rooted — ⟐ launch when ready'
+          : '…seeking a survivor';
+      roundChip.textContent = `❂ Legacy ${Math.floor(pc?.legacy ?? 0)} · ${gardens} garden${gardens === 1 ? '' : 's'} · ${status} 🧬`;
+      if (world.roundState !== 'playing' && !bannerShown) {
+        bannerShown = true;
+        clearSave();
+      }
+      return;
+    }
     if (world.colonies.length < 2) {
       roundChip.style.display = 'none';
       return;
@@ -603,6 +665,27 @@ async function boot(): Promise<void> {
     lerper.alpha = acc / TUNING.simDt;
     tickMsEma += (performance.now() - t0 - tickMsEma) * 0.1;
 
+    // The Drift: the camera rides the lineage. In flight it locks to the Heir
+    // Seed (the signature screen); rooted, it eases toward the Heir's rock but
+    // lets the player pan and look around.
+    if (world.drift && speed > 0) {
+      const pc = world.colonies.find((c) => c.id === playerColonyId);
+      const heirSeed = pc && pc.heirSeedId >= 0 ? world.seeds.find((s) => s.id === pc.heirSeedId) : null;
+      if (heirSeed) {
+        const at = lerper.pos(heirSeed.id, heirSeed.pos);
+        camera.x = at.x;
+        camera.y = at.y;
+        camera.zoom += (1.05 - camera.zoom) * 0.04; // ease out to read the void sliding by
+      } else if (pc) {
+        const heir = world.plants.find((p) => p.id === pc.heirPlantId && p.alive);
+        const ast = heir && world.asteroids.find((a) => a.id === heir.asteroidId);
+        if (ast && !camera.dragging) {
+          camera.x += (ast.pos.x - camera.x) * 0.02;
+          camera.y += (ast.pos.y - 40 - camera.y) * 0.02;
+        }
+      }
+    }
+
     // camera -> stage transform
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -685,6 +768,9 @@ async function boot(): Promise<void> {
     updateRoundUi();
     syncSpeedBar();
 
+    // the Drift's launch button only exists in the Drift
+    heirBtn.style.display = world.drift ? '' : 'none';
+
     // verb buttons wear their cooldowns openly
     const pc = world.colonies.find((c) => c.id === playerColonyId);
     const verbBtns: [HTMLButtonElement, VerbId, string][] = [
@@ -739,6 +825,10 @@ async function boot(): Promise<void> {
     /** Fast-forward n sim ticks (automation/testing only). */
     stepMany(n: number) {
       for (let i = 0; i < n; i++) stepWorld(world, TUNING.simDt);
+    },
+    /** Drift automation: launch the Heir toward a world point. */
+    launchHeir(x: number, y: number) {
+      return launchHeir(world, playerColonyId, { x, y });
     },
   };
 }

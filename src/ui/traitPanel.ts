@@ -1,7 +1,14 @@
 import type { Colony, World } from '../sim/types';
-import { MUTATION_TIMING, mutationDef } from '../content/mutations';
-import { chooseMutation } from '../sim/stats';
+import { MUTATION_TIMING, mutationDef, DRIFT_CATALOG } from '../content/mutations';
+import { chooseMutation, buyDriftMutation, driftCardCost } from '../sim/stats';
 import { SOUND } from '../audio/sound';
+
+const STRAND_LABEL: Record<string, string> = {
+  mobility: 'mobility',
+  protection: 'protection',
+  sensing: 'sensing',
+  colonization: 'colonization',
+};
 
 /**
  * The evolution panel. Its heart is the mutation draft: when the clock
@@ -61,6 +68,10 @@ export class TraitPanel {
     const world = this.getWorld();
     const c = this.colony();
     if (!c) return;
+    if (world.drift) {
+      this.rebuildShop(world, c);
+      return;
+    }
     this.listEl.innerHTML = '';
 
     if (c.pendingOffer) {
@@ -124,6 +135,45 @@ export class TraitPanel {
     }
   }
 
+  /** The Drift shop: spend Legacy on strand mutations, any time. */
+  private rebuildShop(world: World, c: Colony): void {
+    this.listEl.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'tp-offer-head';
+    head.textContent = `❂ THE DRIFT — Legacy ${Math.floor(c.legacy)}`;
+    this.listEl.appendChild(head);
+    const note = document.createElement('p');
+    note.className = 'tp-tier-note';
+    note.textContent = 'Retired gardens trickle Legacy. Spend it here — the loadout rides your lineage.';
+    this.listEl.appendChild(note);
+
+    for (const card of DRIFT_CATALOG) {
+      const owned = c.mutations.includes(card.id);
+      const cost = driftCardCost(c, card.id);
+      const afford = c.legacy >= cost;
+      const el = document.createElement('div');
+      el.className = `tp-trait${owned ? ' owned' : ' tp-offer'}`;
+      if (!owned && !afford) el.classList.add('tp-locked');
+      el.innerHTML = `
+        <div class="tp-trait-top">
+          <b>${card.name}</b>
+          <span>${owned ? '✓ owned' : `❂ ${cost}`} · ${STRAND_LABEL[card.strand]}</span>
+        </div>
+        <p>${card.desc}</p>`;
+      if (!owned) {
+        el.addEventListener('click', () => {
+          if (buyDriftMutation(world, c.id, card.id)) {
+            SOUND.ui('pick');
+            this.rebuild();
+          } else {
+            SOUND.ui('close');
+          }
+        });
+      }
+      this.listEl.appendChild(el);
+    }
+  }
+
   private countdown(): string {
     const world = this.getWorld();
     const c = this.colony();
@@ -138,7 +188,9 @@ export class TraitPanel {
     if (!this.open) return;
     const c = this.colony();
     if (!c) return;
-    const key = `${c.pendingOffer ? c.pendingOffer.join(',') : this.countdown()}:${c.mutations.length}`;
+    const key = this.getWorld().drift
+      ? `drift:${Math.floor(c.legacy)}:${c.mutations.length}`
+      : `${c.pendingOffer ? c.pendingOffer.join(',') : this.countdown()}:${c.mutations.length}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
       this.rebuild();
